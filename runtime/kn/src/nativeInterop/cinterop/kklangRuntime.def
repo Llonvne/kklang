@@ -1,0 +1,2 @@
+headers = kklang_runtime.h
+package = cn.llonvne.kklang.runtime.c

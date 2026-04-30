@@ -2,6 +2,7 @@ import kotlinx.kover.gradle.plugin.dsl.CoverageUnit
 
 plugins {
     kotlin("jvm") version "2.3.20"
+    kotlin("multiplatform") version "2.3.20" apply false
     id("org.jetbrains.kotlinx.kover") version "0.9.8"
 }
 
@@ -39,4 +40,5 @@ kover {
 
 tasks.check {
     dependsOn(tasks.named("koverVerify"))
+    dependsOn(":runtime:kn:check")
 }
