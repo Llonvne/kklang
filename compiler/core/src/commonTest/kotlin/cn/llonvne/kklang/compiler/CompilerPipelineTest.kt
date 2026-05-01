@@ -9,13 +9,14 @@ import cn.llonvne.kklang.execution.IrEvaluator
 import cn.llonvne.kklang.execution.IrInt64
 import cn.llonvne.kklang.execution.IrLowerer
 import cn.llonvne.kklang.execution.IrLoweringResult
+import cn.llonvne.kklang.execution.IrProgram
 import cn.llonvne.kklang.execution.IrUnary
 import cn.llonvne.kklang.execution.IrUnaryOperator
 import cn.llonvne.kklang.frontend.SourceSpan
 import cn.llonvne.kklang.frontend.SourceText
 import cn.llonvne.kklang.frontend.diagnostics.Diagnostic
 import cn.llonvne.kklang.frontend.parsing.Parser
-import cn.llonvne.kklang.typechecking.TypeCheckResult
+import cn.llonvne.kklang.typechecking.ProgramTypeCheckResult
 import cn.llonvne.kklang.typechecking.TypeChecker
 import cn.llonvne.kklang.typechecking.TypeRef
 import kotlin.test.Test
@@ -48,6 +49,21 @@ class CompilerPipelineTest {
     }
 
     /**
+     * 验证 compiler pipeline 会编译不可变 val program。
+     * Verifies that the compiler pipeline compiles an immutable val program.
+     */
+    @Test
+    fun `pipeline compiles immutable val program`() {
+        val result = CompilerPipeline().compile(CompilationInput(SourceText.of("sample.kk", "val x = 1; x + 2")))
+
+        assertIs<CompilationResult.Success>(result)
+        assertEquals(listOf("x"), result.program.ir.declarations.map { it.name })
+        assertEquals(TypeRef.Int64, result.program.type)
+        assertEquals(SourceSpan("sample.kk", 0, 16), result.program.span)
+        assertEquals(result.program.ir.expression, result.program.expression)
+    }
+
+    /**
      * 验证 compiled program 直接暴露 Core IR span 和根类型。
      * Verifies that a compiled program directly exposes the Core IR span and root type.
      */
@@ -55,7 +71,7 @@ class CompilerPipelineTest {
     fun `compiled program exposes span and type`() {
         val span = SourceSpan("sample.kk", 0, 1)
         val program = CompiledProgram(
-            expression = IrUnary(IrUnaryOperator.Plus, IrInt64(1, span), span),
+            ir = IrProgram(emptyList(), IrUnary(IrUnaryOperator.Plus, IrInt64(1, span), span)),
             type = TypeRef.Int64,
         )
 
@@ -95,11 +111,14 @@ class CompilerPipelineTest {
         val result = CompilerPipeline(
             typeChecker = TypeChecker {
                 typeCheckerWasCalled = true
-                TypeCheckResult(null, emptyList())
+                ProgramTypeCheckResult(null, emptyList())
             },
             lowerer = IrLowerer {
                 lowererWasCalled = true
-                IrLoweringResult(IrInt64(1, it.syntax.span), emptyList())
+                IrLoweringResult(
+                    IrProgram(emptyList(), IrInt64(1, it.expression.syntax.span)),
+                    emptyList(),
+                )
             },
         ).compile(CompilationInput(SourceText.of("sample.kk", "1 +")))
 
@@ -121,7 +140,10 @@ class CompilerPipelineTest {
         val result = CompilerPipeline(
             lowerer = IrLowerer {
                 lowererWasCalled = true
-                IrLoweringResult(IrInt64(1, it.syntax.span), emptyList())
+                IrLoweringResult(
+                    IrProgram(emptyList(), IrInt64(1, it.expression.syntax.span)),
+                    emptyList(),
+                )
             },
         ).compile(CompilationInput(source))
 
@@ -141,8 +163,8 @@ class CompilerPipelineTest {
         val result = CompilerPipeline(
             lowerer = IrLowerer {
                 IrLoweringResult(
-                    ir = null,
-                    diagnostics = listOf(Diagnostic("EXEC001", "lowering failure", it.syntax.span)),
+                    program = null,
+                    diagnostics = listOf(Diagnostic("EXEC001", "lowering failure", it.expression.syntax.span)),
                 )
             },
         ).compile(CompilationInput(source))
@@ -160,9 +182,9 @@ class CompilerPipelineTest {
      * Verifies that a type-checker contract violation is converted into COMPILER001.
      */
     @Test
-    fun `pipeline rejects type checker success without typed expression`() {
+    fun `pipeline rejects type checker success without typed program`() {
         val result = CompilerPipeline(
-            typeChecker = TypeChecker { TypeCheckResult(null, emptyList()) },
+            typeChecker = TypeChecker { ProgramTypeCheckResult(null, emptyList()) },
         ).compile(CompilationInput(SourceText.of("sample.kk", "1")))
 
         assertIs<CompilationResult.Failure>(result)

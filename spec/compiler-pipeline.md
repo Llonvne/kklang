@@ -37,11 +37,12 @@ The failure result type is `CompilationResult.Failure`.
 
 ## Program Model / Program 模型
 
-当前 `AstProgram` 只包装一个 expression。
-The current `AstProgram` wraps exactly one expression.
+当前 `AstProgram` 包含零个或多个 `val` declaration 和一个最终 expression。
+The current `AstProgram` contains zero or more `val` declarations and one final
+expression.
 
-当前 `CompiledProgram` 只包装一个 Core IR expression。
-The current `CompiledProgram` wraps exactly one Core IR expression.
+当前 `CompiledProgram` 包装一个 Core IR program。
+The current `CompiledProgram` wraps one Core IR program.
 
 当前 `CompiledProgram` 同时暴露根表达式的类型。
 The current `CompiledProgram` also exposes the type of the root expression.

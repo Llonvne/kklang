@@ -19,15 +19,17 @@ class LexerTest {
      */
     @Test
     fun `default lexer tokenizes seed surface and omits trivia`() {
-        val source = SourceText.of("sample.kk", "alpha + 42\n(beta) _A0")
+        val source = SourceText.of("sample.kk", "val alpha = 42;\n(beta) _A0")
         val result = Lexer().tokenize(source)
 
         assertFalse(result.hasErrors)
         assertEquals(
             listOf(
+                TokenKinds.Val,
                 TokenKinds.Identifier,
-                TokenKinds.Plus,
+                TokenKinds.Equals,
                 TokenKinds.Integer,
+                TokenKinds.Semicolon,
                 TokenKinds.LeftParen,
                 TokenKinds.Identifier,
                 TokenKinds.RightParen,
@@ -36,10 +38,26 @@ class LexerTest {
             ),
             result.tokens.map { it.kind },
         )
-        assertEquals(listOf("alpha", "+", "42", "(", "beta", ")", "_A0", ""), result.tokens.map { it.lexeme })
-        assertEquals(SourceSpan("sample.kk", 0, 5), result.tokens.first().span)
-        assertEquals(SourceSpan("sample.kk", 21, 21), result.tokens.last().span)
+        assertEquals(listOf("val", "alpha", "=", "42", ";", "(", "beta", ")", "_A0", ""), result.tokens.map { it.lexeme })
+        assertEquals(SourceSpan("sample.kk", 0, 3), result.tokens.first().span)
+        assertEquals(SourceSpan("sample.kk", 26, 26), result.tokens.last().span)
         assertEquals("identifier", TokenKinds.Identifier.toString())
+    }
+
+    /**
+     * 验证 val 关键字只匹配完整关键字，较长 identifier 仍保持 identifier。
+     * Verifies that the val keyword matches only the full keyword while longer names remain identifiers.
+     */
+    @Test
+    fun `val keyword does not consume longer identifiers`() {
+        val result = Lexer().tokenize(SourceText.of("sample.kk", "val value"))
+
+        assertFalse(result.hasErrors)
+        assertEquals(
+            listOf(TokenKinds.Val, TokenKinds.Identifier, TokenKinds.EndOfFile),
+            result.tokens.map { it.kind },
+        )
+        assertEquals(listOf("val", "value", ""), result.tokens.map { it.lexeme })
     }
 
     /**

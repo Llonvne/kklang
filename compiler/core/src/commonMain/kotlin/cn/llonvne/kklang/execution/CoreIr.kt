@@ -3,6 +3,35 @@ package cn.llonvne.kklang.execution
 import cn.llonvne.kklang.frontend.SourceSpan
 
 /**
+ * Core IR program，包含不可变 val declarations 和最终 expression。
+ * Core IR program containing immutable val declarations and a final expression.
+ */
+data class IrProgram(
+    val declarations: List<IrValDeclaration>,
+    val expression: IrExpression,
+) {
+    val span: SourceSpan
+        get() {
+            val firstDeclaration = declarations.firstOrNull()
+            return if (firstDeclaration == null) {
+                expression.span
+            } else {
+                firstDeclaration.span.covering(expression.span)
+            }
+        }
+}
+
+/**
+ * Core IR 中的不可变 val declaration。
+ * Immutable val declaration in Core IR.
+ */
+data class IrValDeclaration(
+    val name: String,
+    val initializer: IrExpression,
+    val span: SourceSpan,
+)
+
+/**
  * Core IR expression 的共同接口，所有节点都保留来源 span。
  * Shared interface for Core IR expressions; every node preserves its source span.
  */
@@ -16,6 +45,15 @@ sealed interface IrExpression {
  */
 data class IrInt64(
     val value: Long,
+    override val span: SourceSpan,
+) : IrExpression
+
+/**
+ * 不可变变量引用的 Core IR 节点。
+ * Core IR node for an immutable variable reference.
+ */
+data class IrVariable(
+    val name: String,
     override val span: SourceSpan,
 ) : IrExpression
 

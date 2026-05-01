@@ -25,6 +25,16 @@ The first version defines only `TypeRef.Int64`.
 Integer literals, grouped expressions, unary integer operations, and binary
 integer operations all have type `TypeRef.Int64`.
 
+解析成功的 `val` declaration 会把名字绑定到 initializer 的类型。
+A successfully parsed `val` declaration binds its name to the initializer type.
+
+DSL term / DSL 术语：`val declaration binds initializer type`。
+
+已解析的 identifier expression 如果引用已绑定 `val`，它的类型等于该 `val` 的类型。
+A resolved identifier expression has the same type as the `val` it references.
+
+DSL term / DSL 术语：`identifier reference uses bound val type`。
+
 分组表达式的类型必须等于内部表达式的类型。
 The type of a grouped expression must equal the type of its inner expression.
 
@@ -37,12 +47,18 @@ Successful type checking must return `TypedExpression`.
 `TypedExpression` must preserve the original AST, source span, and inferred
 `TypeRef`.
 
+类型检查成功时必须返回 `TypedProgram`。
+Successful type checking must return `TypedProgram`.
+
 第一版 typed AST 节点如下。
 The first typed AST nodes are:
 
 | Node / 节点 | Meaning / 含义 |
 | --- | --- |
+| `TypedProgram` | typed program / 已类型检查的程序 |
+| `TypedValDeclaration` | typed immutable val declaration / 已类型检查的不可变 val 声明 |
 | `TypedInteger` | typed integer literal / 已类型检查的整数字面量 |
+| `TypedVariable` | typed variable reference / 已类型检查的变量引用 |
 | `TypedGrouped` | typed grouped expression / 已类型检查的分组表达式 |
 | `TypedPrefix` | typed prefix expression / 已类型检查的前缀表达式 |
 | `TypedBinary` | typed binary expression / 已类型检查的二元表达式 |
@@ -54,6 +70,8 @@ Currently supported typed source forms:
 
 | Source form / 源码形式 | Type / 类型 |
 | --- | --- |
+| `val` declaration / `val` 声明 | initializer type / initializer 类型 |
+| identifier reference / 标识符引用 | referenced `val` type / 被引用 `val` 的类型 |
 | integer literal / 整数字面量 | `TypeRef.Int64` |
 | grouped expression / 分组表达式 | inner expression type / 内部表达式类型 |
 | unary `+` / 一元 `+` | `TypeRef.Int64` |
@@ -82,3 +100,4 @@ Operators outside the current seed expression grammar must produce `TYPE002`.
 | --- | --- |
 | `TYPE001` | unresolved identifier / 未解析标识符 |
 | `TYPE002` | unsupported expression for current type-system scope / 当前类型系统范围不支持的表达式 |
+| `BIND001` | duplicate immutable value in the current program scope / 当前 program scope 中重复声明不可变值 |

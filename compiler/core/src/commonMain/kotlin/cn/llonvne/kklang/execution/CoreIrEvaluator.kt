@@ -21,44 +21,83 @@ data class EvaluationResult(
  */
 fun interface IrEvaluator {
     /**
-     * 求值单个 Core IR expression 并返回值或 diagnostics。
-     * Evaluates one Core IR expression and returns either a value or diagnostics.
+     * 求值单个 Core IR program 并返回值或 diagnostics。
+     * Evaluates one Core IR program and returns either a value or diagnostics.
      */
-    fun evaluate(expression: IrExpression): EvaluationResult
+    fun evaluate(program: IrProgram): EvaluationResult
 }
 
 /**
- * 当前最小 Core IR evaluator，只支持 Int64 表达式和受检整数运算。
- * Current minimal Core IR evaluator supporting only Int64 expressions and checked integer operations.
+ * 当前最小 Core IR evaluator，支持 Int64、不可变 val 和受检整数运算。
+ * Current minimal Core IR evaluator supporting Int64, immutable vals, and checked integer operations.
  */
 class CoreIrEvaluator : IrEvaluator {
     /**
-     * 求值 Core IR 根节点并收集所有求值期 diagnostics。
-     * Evaluates the Core IR root node and collects all evaluation diagnostics.
+     * 求值 Core IR program 并收集所有求值期 diagnostics。
+     * Evaluates the Core IR program and collects all evaluation diagnostics.
      */
-    override fun evaluate(expression: IrExpression): EvaluationResult {
+    override fun evaluate(program: IrProgram): EvaluationResult {
         val diagnostics = DiagnosticBag()
-        val value = evaluateExpression(expression, diagnostics)
+        val environment = mutableMapOf<String, ExecutionValue>()
+        for (declaration in program.declarations) {
+            val value = evaluateExpression(declaration.initializer, environment, diagnostics)
+                ?: return EvaluationResult(null, diagnostics.toList())
+            environment[declaration.name] = value
+        }
+        val value = evaluateExpression(program.expression, environment, diagnostics)
         return EvaluationResult(value = value, diagnostics = diagnostics.toList())
     }
+
+    /**
+     * 求值单个 Core IR expression，测试和局部调用可使用此便捷入口。
+     * Evaluates one Core IR expression; tests and local callers may use this convenience entry point.
+     */
+    fun evaluate(expression: IrExpression): EvaluationResult =
+        evaluate(IrProgram(declarations = emptyList(), expression = expression))
 
     /**
      * 按节点类型分派 Core IR expression 求值。
      * Dispatches Core IR expression evaluation by node type.
      */
-    private fun evaluateExpression(expression: IrExpression, diagnostics: DiagnosticBag): ExecutionValue? =
+    private fun evaluateExpression(
+        expression: IrExpression,
+        environment: Map<String, ExecutionValue>,
+        diagnostics: DiagnosticBag,
+    ): ExecutionValue? =
         when (expression) {
             is IrInt64 -> ExecutionValue.Int64(expression.value)
-            is IrUnary -> evaluateUnary(expression, diagnostics)
-            is IrBinary -> evaluateBinary(expression, diagnostics)
+            is IrVariable -> evaluateVariable(expression, environment, diagnostics)
+            is IrUnary -> evaluateUnary(expression, environment, diagnostics)
+            is IrBinary -> evaluateBinary(expression, environment, diagnostics)
         }
+
+    /**
+     * 求值变量引用，未绑定时报告防御性 EXEC001。
+     * Evaluates a variable reference and reports defensive EXEC001 when it is unbound.
+     */
+    private fun evaluateVariable(
+        expression: IrVariable,
+        environment: Map<String, ExecutionValue>,
+        diagnostics: DiagnosticBag,
+    ): ExecutionValue? {
+        val value = environment[expression.name]
+        if (value == null) {
+            diagnostics.report("EXEC001", "unbound variable", expression.span)
+            return null
+        }
+        return value
+    }
 
     /**
      * 求值一元运算，并在 operand 已失败时传播失败。
      * Evaluates a unary operation and propagates failure when the operand already failed.
      */
-    private fun evaluateUnary(expression: IrUnary, diagnostics: DiagnosticBag): ExecutionValue? {
-        val operand = evaluateExpression(expression.operand, diagnostics)?.asInt64() ?: return null
+    private fun evaluateUnary(
+        expression: IrUnary,
+        environment: Map<String, ExecutionValue>,
+        diagnostics: DiagnosticBag,
+    ): ExecutionValue? {
+        val operand = evaluateExpression(expression.operand, environment, diagnostics)?.asInt64() ?: return null
         return when (expression.operator) {
             IrUnaryOperator.Plus -> ExecutionValue.Int64(operand)
             IrUnaryOperator.Minus -> negate(expression, operand, diagnostics)
@@ -69,9 +108,13 @@ class CoreIrEvaluator : IrEvaluator {
      * 求值二元运算，并在任一 operand 已失败时传播失败。
      * Evaluates a binary operation and propagates failure when either operand already failed.
      */
-    private fun evaluateBinary(expression: IrBinary, diagnostics: DiagnosticBag): ExecutionValue? {
-        val left = evaluateExpression(expression.left, diagnostics)?.asInt64()
-        val right = evaluateExpression(expression.right, diagnostics)?.asInt64()
+    private fun evaluateBinary(
+        expression: IrBinary,
+        environment: Map<String, ExecutionValue>,
+        diagnostics: DiagnosticBag,
+    ): ExecutionValue? {
+        val left = evaluateExpression(expression.left, environment, diagnostics)?.asInt64()
+        val right = evaluateExpression(expression.right, environment, diagnostics)?.asInt64()
         if (left == null || right == null) {
             return null
         }

@@ -42,6 +42,19 @@ class KkRuntimeExecutionEngineTest {
     }
 
     /**
+     * 验证 runtime backend 成功执行不可变 val declaration。
+     * Verifies that the runtime backend executes immutable val declarations.
+     */
+    @Test
+    fun `runtime backend executes immutable val declarations`() {
+        val result = KkRuntimeExecutionEngine().execute(SourceText.of("sample.kk", "val x = 1; val y = x + 2; y * 3"))
+
+        assertIs<KkRuntimeExecutionResult.Success>(result)
+        assertFalse(result.hasErrors)
+        assertEquals(KkValue.Int64(value = 9, tag = KK_VALUE_INT64), result.value)
+    }
+
+    /**
      * 验证编译失败会直接返回原始 diagnostics。
      * Verifies that compilation failures directly return original diagnostics.
      */
@@ -49,6 +62,7 @@ class KkRuntimeExecutionEngineTest {
     fun `runtime backend returns compiler diagnostics`() {
         assertFailureCodes("@", "LEX001")
         assertFailureCodes("name", "TYPE001")
+        assertFailureCodes("val x = 1; val x = 2; x", "BIND001")
     }
 
     /**

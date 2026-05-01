@@ -26,6 +26,18 @@ class ExecutionEngineTest {
     }
 
     /**
+     * 验证 execution engine 执行不可变 val declaration 和变量引用。
+     * Verifies that the execution engine executes immutable val declarations and variable references.
+     */
+    @Test
+    fun `engine executes immutable val declarations`() {
+        val result = ExecutionEngine().execute(SourceText.of("sample.kk", "val x = 1; val y = x + 2; y * 3"))
+
+        assertIs<ExecutionResult.Success>(result)
+        assertEquals(ExecutionValue.Int64(9), result.value)
+    }
+
+    /**
      * 验证分组、前缀、除法和零乘法的成功执行路径。
      * Verifies successful execution paths for grouping, prefix operators, division, and multiplication by zero.
      */
@@ -47,6 +59,7 @@ class ExecutionEngineTest {
         assertFailureCodes("@", "LEX001")
         assertFailureCodes("1 +", "PARSE001")
         assertFailureCodes("name", "TYPE001")
+        assertFailureCodes("val x = 1; val x = 2; x", "BIND001")
     }
 
     /**

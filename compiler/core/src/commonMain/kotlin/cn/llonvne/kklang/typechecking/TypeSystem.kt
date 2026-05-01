@@ -3,6 +3,7 @@ package cn.llonvne.kklang.typechecking
 import cn.llonvne.kklang.frontend.diagnostics.Diagnostic
 import cn.llonvne.kklang.frontend.diagnostics.DiagnosticBag
 import cn.llonvne.kklang.frontend.lexing.TokenKinds
+import cn.llonvne.kklang.frontend.parsing.AstProgram
 import cn.llonvne.kklang.frontend.parsing.BinaryExpression
 import cn.llonvne.kklang.frontend.parsing.Expression
 import cn.llonvne.kklang.frontend.parsing.GroupedExpression
@@ -10,6 +11,7 @@ import cn.llonvne.kklang.frontend.parsing.IdentifierExpression
 import cn.llonvne.kklang.frontend.parsing.IntegerExpression
 import cn.llonvne.kklang.frontend.parsing.MissingExpression
 import cn.llonvne.kklang.frontend.parsing.PrefixExpression
+import cn.llonvne.kklang.frontend.parsing.ValDeclaration
 
 /**
  * 当前类型系统可表达的类型引用。
@@ -33,12 +35,44 @@ sealed interface TypedExpression {
 }
 
 /**
+ * 类型检查后的 program。
+ * Type-checked program.
+ */
+data class TypedProgram(
+    val declarations: List<TypedValDeclaration>,
+    val expression: TypedExpression,
+    val type: TypeRef = expression.type,
+)
+
+/**
+ * 类型检查后的不可变 val declaration。
+ * Type-checked immutable val declaration.
+ */
+data class TypedValDeclaration(
+    val syntax: ValDeclaration,
+    val initializer: TypedExpression,
+    val type: TypeRef = initializer.type,
+) {
+    val name: String
+        get() = syntax.name
+}
+
+/**
  * 类型检查后的整数字面量 expression。
  * Type-checked integer-literal expression.
  */
 data class TypedInteger(
     override val syntax: IntegerExpression,
     override val type: TypeRef = TypeRef.Int64,
+) : TypedExpression
+
+/**
+ * 类型检查后的变量引用 expression。
+ * Type-checked variable-reference expression.
+ */
+data class TypedVariable(
+    override val syntax: IdentifierExpression,
+    override val type: TypeRef,
 ) : TypedExpression
 
 /**
@@ -85,15 +119,27 @@ data class TypeCheckResult(
 }
 
 /**
- * AST 到 typed AST 的可替换类型检查接口。
- * Replaceable type-checking interface from AST to typed AST.
+ * program 类型检查结果，成功时 program 非空，失败时 diagnostics 非空。
+ * Program type-checking result; program is present on success and diagnostics are present on failure.
+ */
+data class ProgramTypeCheckResult(
+    val program: TypedProgram?,
+    val diagnostics: List<Diagnostic>,
+) {
+    val hasErrors: Boolean
+        get() = diagnostics.isNotEmpty()
+}
+
+/**
+ * AST program 到 typed program 的可替换类型检查接口。
+ * Replaceable type-checking interface from AST programs to typed programs.
  */
 fun interface TypeChecker {
     /**
-     * 检查一个 AST expression 并返回 typed AST 或 diagnostics。
-     * Checks one AST expression and returns either typed AST or diagnostics.
+     * 检查一个 AST program 并返回 typed program 或 diagnostics。
+     * Checks one AST program and returns either a typed program or diagnostics.
      */
-    fun check(expression: Expression): TypeCheckResult
+    fun check(program: AstProgram): ProgramTypeCheckResult
 }
 
 /**
@@ -102,12 +148,45 @@ fun interface TypeChecker {
  */
 class SeedTypeChecker : TypeChecker {
     /**
-     * 类型检查根 expression，并在过程中收集 type diagnostics。
-     * Type-checks the root expression while collecting type diagnostics.
+     * 类型检查 program，并在过程中收集 binding/type diagnostics。
+     * Type-checks a program while collecting binding and type diagnostics.
      */
-    override fun check(expression: Expression): TypeCheckResult {
+    override fun check(program: AstProgram): ProgramTypeCheckResult {
         val diagnostics = DiagnosticBag()
-        val typed = checkExpression(expression, diagnostics)
+        val scope = mutableMapOf<String, TypeRef>()
+        val declarations = mutableListOf<TypedValDeclaration>()
+
+        for (declaration in program.declarations) {
+            val duplicate = scope.containsKey(declaration.name)
+            val initializer = checkExpression(declaration.initializer, scope, diagnostics)
+            if (duplicate) {
+                diagnostics.report("BIND001", "duplicate immutable value", declaration.nameToken.span)
+            }
+            if (!duplicate && initializer != null) {
+                scope[declaration.name] = initializer.type
+                declarations += TypedValDeclaration(syntax = declaration, initializer = initializer)
+            }
+        }
+
+        val expression = checkExpression(program.expression, scope, diagnostics)
+            ?: return ProgramTypeCheckResult(program = null, diagnostics = diagnostics.toList())
+        val diagnosticsList = diagnostics.toList()
+        if (diagnosticsList.isNotEmpty()) {
+            return ProgramTypeCheckResult(program = null, diagnostics = diagnosticsList)
+        }
+        return ProgramTypeCheckResult(
+            program = TypedProgram(declarations = declarations.toList(), expression = expression),
+            diagnostics = diagnosticsList,
+        )
+    }
+
+    /**
+     * 使用空作用域类型检查单个 expression。
+     * Type-checks one expression with an empty scope.
+     */
+    fun check(expression: Expression): TypeCheckResult {
+        val diagnostics = DiagnosticBag()
+        val typed = checkExpression(expression, emptyMap(), diagnostics)
         return TypeCheckResult(expression = typed, diagnostics = diagnostics.toList())
     }
 
@@ -115,13 +194,17 @@ class SeedTypeChecker : TypeChecker {
      * 按 AST expression 类型分派类型检查。
      * Dispatches type checking by AST expression type.
      */
-    private fun checkExpression(expression: Expression, diagnostics: DiagnosticBag): TypedExpression? =
+    private fun checkExpression(
+        expression: Expression,
+        scope: Map<String, TypeRef>,
+        diagnostics: DiagnosticBag,
+    ): TypedExpression? =
         when (expression) {
             is IntegerExpression -> TypedInteger(expression)
-            is GroupedExpression -> checkGrouped(expression, diagnostics)
-            is PrefixExpression -> checkPrefix(expression, diagnostics)
-            is BinaryExpression -> checkBinary(expression, diagnostics)
-            is IdentifierExpression -> unresolvedIdentifier(expression, diagnostics)
+            is GroupedExpression -> checkGrouped(expression, scope, diagnostics)
+            is PrefixExpression -> checkPrefix(expression, scope, diagnostics)
+            is BinaryExpression -> checkBinary(expression, scope, diagnostics)
+            is IdentifierExpression -> checkIdentifier(expression, scope, diagnostics)
             is MissingExpression -> unsupported(expression, diagnostics)
         }
 
@@ -129,8 +212,12 @@ class SeedTypeChecker : TypeChecker {
      * 类型检查分组表达式并保留内部表达式类型。
      * Type-checks a grouped expression and preserves the inner expression type.
      */
-    private fun checkGrouped(expression: GroupedExpression, diagnostics: DiagnosticBag): TypedExpression? {
-        val inner = checkExpression(expression.expression, diagnostics) ?: return null
+    private fun checkGrouped(
+        expression: GroupedExpression,
+        scope: Map<String, TypeRef>,
+        diagnostics: DiagnosticBag,
+    ): TypedExpression? {
+        val inner = checkExpression(expression.expression, scope, diagnostics) ?: return null
         return TypedGrouped(syntax = expression, inner = inner)
     }
 
@@ -138,8 +225,12 @@ class SeedTypeChecker : TypeChecker {
      * 类型检查当前支持的一元 prefix expression。
      * Type-checks the currently supported unary prefix expression.
      */
-    private fun checkPrefix(expression: PrefixExpression, diagnostics: DiagnosticBag): TypedExpression? {
-        val operand = checkExpression(expression.operand, diagnostics) ?: return null
+    private fun checkPrefix(
+        expression: PrefixExpression,
+        scope: Map<String, TypeRef>,
+        diagnostics: DiagnosticBag,
+    ): TypedExpression? {
+        val operand = checkExpression(expression.operand, scope, diagnostics) ?: return null
         if (expression.operator.kind != TokenKinds.Plus && expression.operator.kind != TokenKinds.Minus) {
             return unsupported(expression, diagnostics)
         }
@@ -150,9 +241,13 @@ class SeedTypeChecker : TypeChecker {
      * 类型检查当前支持的二元 expression。
      * Type-checks the currently supported binary expression.
      */
-    private fun checkBinary(expression: BinaryExpression, diagnostics: DiagnosticBag): TypedExpression? {
-        val left = checkExpression(expression.left, diagnostics)
-        val right = checkExpression(expression.right, diagnostics)
+    private fun checkBinary(
+        expression: BinaryExpression,
+        scope: Map<String, TypeRef>,
+        diagnostics: DiagnosticBag,
+    ): TypedExpression? {
+        val left = checkExpression(expression.left, scope, diagnostics)
+        val right = checkExpression(expression.right, scope, diagnostics)
         if (left == null || right == null) {
             return null
         }
@@ -167,12 +262,21 @@ class SeedTypeChecker : TypeChecker {
     }
 
     /**
-     * 报告当前没有绑定语义的 identifier。
-     * Reports an identifier that has no binding semantics yet.
+     * 类型检查 identifier 引用，未绑定时报告 TYPE001。
+     * Type-checks an identifier reference and reports TYPE001 when it is unbound.
      */
-    private fun unresolvedIdentifier(expression: IdentifierExpression, diagnostics: DiagnosticBag): TypedExpression? {
-        diagnostics.report("TYPE001", "unresolved identifier", expression.span)
-        return null
+    private fun checkIdentifier(
+        expression: IdentifierExpression,
+        scope: Map<String, TypeRef>,
+        diagnostics: DiagnosticBag,
+    ): TypedExpression? {
+        val type = scope[expression.name]
+        return if (type == null) {
+            diagnostics.report("TYPE001", "unresolved identifier", expression.span)
+            null
+        } else {
+            TypedVariable(syntax = expression, type = type)
+        }
     }
 
     /**

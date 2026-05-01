@@ -8,29 +8,35 @@ import cn.llonvne.kklang.typechecking.TypedExpression
 import cn.llonvne.kklang.typechecking.TypedGrouped
 import cn.llonvne.kklang.typechecking.TypedInteger
 import cn.llonvne.kklang.typechecking.TypedPrefix
+import cn.llonvne.kklang.typechecking.TypedProgram
+import cn.llonvne.kklang.typechecking.TypedValDeclaration
+import cn.llonvne.kklang.typechecking.TypedVariable
 
 /**
  * AST 到 Core IR lowering 的结果，成功时 ir 非空，失败时 diagnostics 非空。
  * Result of lowering AST to Core IR; ir is present on success and diagnostics are present on failure.
  */
 data class IrLoweringResult(
-    val ir: IrExpression?,
+    val program: IrProgram?,
     val diagnostics: List<Diagnostic>,
 ) {
+    val ir: IrExpression?
+        get() = program?.expression
+
     val hasErrors: Boolean
         get() = diagnostics.isNotEmpty()
 }
 
 /**
- * typed AST 到 Core IR lowering 的可替换接口。
- * Replaceable interface for lowering typed AST expressions to Core IR.
+ * typed program 到 Core IR lowering 的可替换接口。
+ * Replaceable interface for lowering typed programs to Core IR.
  */
 fun interface IrLowerer {
     /**
-     * 降级一个 typed AST expression 并返回 Core IR 或 diagnostics。
-     * Lowers one typed AST expression and returns either Core IR or diagnostics.
+     * 降级一个 typed program 并返回 Core IR program 或 diagnostics。
+     * Lowers one typed program and returns either a Core IR program or diagnostics.
      */
-    fun lower(expression: TypedExpression): IrLoweringResult
+    fun lower(program: TypedProgram): IrLoweringResult
 }
 
 /**
@@ -39,13 +45,38 @@ fun interface IrLowerer {
  */
 class CoreIrLowerer : IrLowerer {
     /**
-     * 降级 typed 根 expression，并在过程中收集 lowering diagnostics。
-     * Lowers the typed root expression while collecting lowering diagnostics.
+     * 降级 typed program，并在过程中收集 lowering diagnostics。
+     * Lowers the typed program while collecting lowering diagnostics.
      */
-    override fun lower(expression: TypedExpression): IrLoweringResult {
+    override fun lower(program: TypedProgram): IrLoweringResult {
         val diagnostics = DiagnosticBag()
-        val ir = lowerExpression(expression, diagnostics)
-        return IrLoweringResult(ir = ir, diagnostics = diagnostics.toList())
+        val declarations = program.declarations.mapNotNull { lowerDeclaration(it, diagnostics) }
+        val expression = lowerExpression(program.expression, diagnostics)
+            ?: return IrLoweringResult(program = null, diagnostics = diagnostics.toList())
+        val diagnosticsList = diagnostics.toList()
+        if (diagnosticsList.isNotEmpty()) {
+            return IrLoweringResult(program = null, diagnostics = diagnosticsList)
+        }
+        return IrLoweringResult(
+            program = IrProgram(declarations = declarations, expression = expression),
+            diagnostics = diagnosticsList,
+        )
+    }
+
+    /**
+     * 降级单个 typed expression，测试和局部调用可使用此便捷入口。
+     * Lowers one typed expression; tests and local callers may use this convenience entry point.
+     */
+    fun lower(expression: TypedExpression): IrLoweringResult =
+        lower(TypedProgram(declarations = emptyList(), expression = expression))
+
+    /**
+     * 降级一个 typed val declaration。
+     * Lowers one typed val declaration.
+     */
+    private fun lowerDeclaration(declaration: TypedValDeclaration, diagnostics: DiagnosticBag): IrValDeclaration? {
+        val initializer = lowerExpression(declaration.initializer, diagnostics) ?: return null
+        return IrValDeclaration(name = declaration.name, initializer = initializer, span = declaration.syntax.span)
     }
 
     /**
@@ -55,6 +86,7 @@ class CoreIrLowerer : IrLowerer {
     private fun lowerExpression(expression: TypedExpression, diagnostics: DiagnosticBag): IrExpression? =
         when (expression) {
             is TypedInteger -> lowerInteger(expression, diagnostics)
+            is TypedVariable -> IrVariable(name = expression.syntax.name, span = expression.syntax.span)
             is TypedGrouped -> lowerExpression(expression.inner, diagnostics)
             is TypedPrefix -> lowerPrefix(expression, diagnostics)
             is TypedBinary -> lowerBinary(expression, diagnostics)

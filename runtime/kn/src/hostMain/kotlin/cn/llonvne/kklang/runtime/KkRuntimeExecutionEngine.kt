@@ -53,7 +53,7 @@ class KkRuntimeExecutionEngine(
             is CompilationResult.Success -> compilation.program
         }
 
-        val evaluation = evaluator.evaluate(program.expression)
+        val evaluation = evaluator.evaluate(program.ir)
         val value = evaluation.value
         if (value == null) {
             return KkRuntimeExecutionResult.Failure(evaluation.diagnostics)

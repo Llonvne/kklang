@@ -59,10 +59,13 @@ class LexerConfig private constructor(
          * Registers the seed language default lexer rules.
          */
         fun defaultRules(): Builder {
+            rule(LexerRule.literal("val", TokenKinds.Val, "val"))
             rule(LexerRule.run("identifier", TokenKinds.Identifier, ::isIdentifierStart, ::isIdentifierContinue))
             rule(LexerRule.run("integer", TokenKinds.Integer, Char::isDigit, Char::isDigit))
             rule(LexerRule.literal("left paren", TokenKinds.LeftParen, "("))
             rule(LexerRule.literal("right paren", TokenKinds.RightParen, ")"))
+            rule(LexerRule.literal("equals", TokenKinds.Equals, "="))
+            rule(LexerRule.literal("semicolon", TokenKinds.Semicolon, ";"))
             rule(LexerRule.literal("plus", TokenKinds.Plus, "+"))
             rule(LexerRule.literal("minus", TokenKinds.Minus, "-"))
             rule(LexerRule.literal("star", TokenKinds.Star, "*"))

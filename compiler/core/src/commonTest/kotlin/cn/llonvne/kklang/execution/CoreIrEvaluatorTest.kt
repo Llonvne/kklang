@@ -14,6 +14,56 @@ class CoreIrEvaluatorTest {
     private val span = SourceSpan("sample.kk", 0, 1)
 
     /**
+     * 验证 program 中的 val declaration 会按顺序求值并绑定变量。
+     * Verifies that val declarations in a program are evaluated in order and bind variables.
+     */
+    @Test
+    fun `evaluator evaluates immutable val program`() {
+        val program = IrProgram(
+            declarations = listOf(
+                IrValDeclaration(name = "x", initializer = IrInt64(1, span), span = span),
+                IrValDeclaration(
+                    name = "y",
+                    initializer = IrBinary(
+                        left = IrVariable("x", span),
+                        operator = IrBinaryOperator.Plus,
+                        right = IrInt64(2, span),
+                        span = span,
+                    ),
+                    span = span,
+                ),
+            ),
+            expression = IrVariable("y", span),
+        )
+
+        val result = CoreIrEvaluator().evaluate(program)
+
+        assertEquals(ExecutionValue.Int64(3), result.value)
+    }
+
+    /**
+     * 验证未绑定变量和 declaration initializer 失败都会让 program 求值失败。
+     * Verifies that unbound variables and declaration-initializer failures make program evaluation fail.
+     */
+    @Test
+    fun `evaluator reports unbound variables and declaration failures`() {
+        val unbound = CoreIrEvaluator().evaluate(IrProgram(emptyList(), IrVariable("x", span)))
+        val declarationFailure = CoreIrEvaluator().evaluate(
+            IrProgram(
+                declarations = listOf(IrValDeclaration(name = "x", initializer = IrVariable("missing", span), span = span)),
+                expression = IrInt64(1, span),
+            ),
+        )
+
+        assertTrue(unbound.hasErrors)
+        assertNull(unbound.value)
+        assertEquals("EXEC001", unbound.diagnostics.single().code)
+        assertTrue(declarationFailure.hasErrors)
+        assertNull(declarationFailure.value)
+        assertEquals("EXEC001", declarationFailure.diagnostics.single().code)
+    }
+
+    /**
      * 验证一元取负的成功路径和 Long.MIN_VALUE 溢出路径。
      * Verifies successful unary negation and the Long.MIN_VALUE overflow path.
      */

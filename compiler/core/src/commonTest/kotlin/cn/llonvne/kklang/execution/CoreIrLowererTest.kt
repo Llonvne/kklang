@@ -13,10 +13,12 @@ import cn.llonvne.kklang.typechecking.TypeRef
 import cn.llonvne.kklang.typechecking.TypedBinary
 import cn.llonvne.kklang.typechecking.TypedExpression
 import cn.llonvne.kklang.typechecking.TypedPrefix
+import cn.llonvne.kklang.typechecking.TypedProgram
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -37,6 +39,35 @@ class CoreIrLowererTest {
             "(* (neg (+ int64(1) int64(2))) (pos int64(3)))",
             requireNotNull(result.ir).render(),
         )
+    }
+
+    /**
+     * 验证 lowerer 会把 typed val declarations 和 variable references 降级为 Core IR。
+     * Verifies that the lowerer lowers typed val declarations and variable references into Core IR.
+     */
+    @Test
+    fun `lowerer lowers typed val declarations and variable references`() {
+        val result = lowerProgram("val x = 1; val y = x + 2; y")
+
+        assertFalse(result.hasErrors)
+        val program = requireNotNull(result.program)
+        assertEquals(listOf("x", "y"), program.declarations.map { it.name })
+        assertEquals("var(y)", program.expression.render())
+        assertEquals("(+ var(x) int64(2))", program.declarations[1].initializer.render())
+    }
+
+    /**
+     * 验证 val declaration initializer 的 lowering 失败会让整个 program 失败。
+     * Verifies that lowering failure in a val declaration initializer fails the whole program.
+     */
+    @Test
+    fun `lowerer reports val declaration initializer failures`() {
+        val result = lowerProgram("val x = 9223372036854775808; 1")
+
+        assertTrue(result.hasErrors)
+        assertNull(result.program)
+        assertNull(result.ir)
+        assertEquals("EXEC003", result.diagnostics.single().code)
     }
 
     /**
@@ -125,11 +156,25 @@ class CoreIrLowererTest {
         CoreIrLowerer().lower(type(text))
 
     /**
+     * 解析、类型检查并 lowering 一个测试 program。
+     * Parses, type-checks, and lowers one test program.
+     */
+    private fun lowerProgram(text: String): IrLoweringResult =
+        CoreIrLowerer().lower(typeProgram(text))
+
+    /**
      * 解析并类型检查一段测试源码。
      * Parses and type-checks one test source snippet.
      */
     private fun type(text: String): TypedExpression =
         requireNotNull(SeedTypeChecker().check(parse(text)).expression)
+
+    /**
+     * 解析并类型检查一个测试 program。
+     * Parses and type-checks one test program.
+     */
+    private fun typeProgram(text: String): TypedProgram =
+        requireNotNull(SeedTypeChecker().check(parseProgram(text)).program)
 
     /**
      * 使用默认 lexer/parser 解析一段测试源码。
@@ -139,6 +184,15 @@ class CoreIrLowererTest {
         Parser(Lexer().tokenize(SourceText.of("sample.kk", text)).tokens)
             .parseExpressionDocument()
             .expression
+
+    /**
+     * 使用默认 lexer/parser 解析一个测试 program。
+     * Parses one test program with the default lexer and parser.
+     */
+    private fun parseProgram(text: String) =
+        Parser(Lexer().tokenize(SourceText.of("sample.kk", text)).tokens)
+            .parseProgramDocument()
+            .program
 }
 
 /**
@@ -148,6 +202,7 @@ class CoreIrLowererTest {
 private fun IrExpression.render(): String =
     when (this) {
         is IrInt64 -> "int64($value)"
+        is IrVariable -> "var($name)"
         is IrUnary -> "(${operator.text} ${operand.render()})"
         is IrBinary -> "(${operator.text} ${left.render()} ${right.render()})"
     }

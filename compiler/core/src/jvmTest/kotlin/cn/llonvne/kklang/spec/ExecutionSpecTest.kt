@@ -29,7 +29,10 @@ class ExecutionSpecTest {
      */
     @Test
     fun `execution dsl spec records first core ir surface`() {
-        assertEquals(listOf("IrInt64", "IrUnary", "IrBinary"), minimalExecutionSpec.irNodes)
+        assertEquals(
+            listOf("IrProgram", "IrValDeclaration", "IrInt64", "IrVariable", "IrUnary", "IrBinary"),
+            minimalExecutionSpec.irNodes,
+        )
     }
 
     /**
@@ -40,6 +43,8 @@ class ExecutionSpecTest {
     fun `execution dsl spec records current executable forms`() {
         assertEquals(
             listOf(
+                "immutable val declaration",
+                "identifier reference",
                 "integer literal",
                 "grouped expression",
                 "unary plus",

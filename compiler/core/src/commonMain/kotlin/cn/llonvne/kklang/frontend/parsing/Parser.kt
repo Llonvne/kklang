@@ -20,6 +20,18 @@ data class ParseResult(
 }
 
 /**
+ * parser program 输出，包含 AST program 和语法 diagnostics。
+ * Parser program output containing an AST program and syntax diagnostics.
+ */
+data class ProgramParseResult(
+    val program: AstProgram,
+    val diagnostics: List<Diagnostic>,
+) {
+    val hasErrors: Boolean
+        get() = diagnostics.isNotEmpty()
+}
+
+/**
  * 基于 token 流的 Pratt parser，使用 ParserConfig 提供 prefix/infix parselet。
  * Pratt parser over a token stream using prefix and infix parselets from ParserConfig.
  */
@@ -46,6 +58,46 @@ class Parser(
             advance()
         }
         return ParseResult(expression = expression, diagnostics = diagnostics.toList())
+    }
+
+    /**
+     * 解析完整 program 文档：零个或多个 val declaration 后接最终 expression。
+     * Parses a complete program document: zero or more val declarations followed by a final expression.
+     */
+    fun parseProgramDocument(): ProgramParseResult {
+        val declarations = mutableListOf<ValDeclaration>()
+        while (current.kind == TokenKinds.Val) {
+            declarations += parseValDeclaration()
+        }
+
+        val expression = parseExpression()
+        while (current.kind != TokenKinds.EndOfFile) {
+            diagnostics.report("PARSE002", "unexpected trailing token", current.span)
+            advance()
+        }
+        return ProgramParseResult(
+            program = AstProgram(expression = expression, declarations = declarations.toList()),
+            diagnostics = diagnostics.toList(),
+        )
+    }
+
+    /**
+     * 解析一个以分号结束的 val declaration。
+     * Parses one semicolon-terminated val declaration.
+     */
+    private fun parseValDeclaration(): ValDeclaration {
+        val valToken = expect(TokenKinds.Val, "PARSE003", "expected val")
+        val name = expect(TokenKinds.Identifier, "PARSE003", "expected identifier")
+        val equals = expect(TokenKinds.Equals, "PARSE003", "expected equals")
+        val initializer = parseExpression()
+        val semicolon = expect(TokenKinds.Semicolon, "PARSE003", "expected semicolon")
+        return ValDeclaration(
+            valToken = valToken,
+            nameToken = name,
+            equalsToken = equals,
+            initializer = initializer,
+            semicolonToken = semicolon,
+        )
     }
 
     /**

@@ -12,12 +12,40 @@ sealed interface Expression {
 }
 
 /**
- * 当前最小 AST program，只包装一个 expression。
- * Current minimal AST program that wraps exactly one expression.
+ * 当前 AST program，包含不可变 val declarations 和最终 expression。
+ * Current AST program containing immutable val declarations and a final expression.
  */
-data class AstProgram(val expression: Expression) {
+data class AstProgram(
+    val expression: Expression,
+    val declarations: List<ValDeclaration> = emptyList(),
+) {
     val span: SourceSpan
-        get() = expression.span
+        get() {
+            val firstDeclaration = declarations.firstOrNull()
+            return if (firstDeclaration == null) {
+                expression.span
+            } else {
+                firstDeclaration.span.covering(expression.span)
+            }
+        }
+}
+
+/**
+ * 不可变 val declaration AST 节点。
+ * AST node for an immutable val declaration.
+ */
+data class ValDeclaration(
+    val valToken: Token,
+    val nameToken: Token,
+    val equalsToken: Token,
+    val initializer: Expression,
+    val semicolonToken: Token,
+) {
+    val name: String
+        get() = nameToken.lexeme
+
+    val span: SourceSpan
+        get() = valToken.span.covering(semicolonToken.span)
 }
 
 /**

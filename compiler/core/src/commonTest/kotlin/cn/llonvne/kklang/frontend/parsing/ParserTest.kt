@@ -42,6 +42,17 @@ class ParserTest {
     }
 
     /**
+     * 验证包含 val declaration 的 AstProgram span 覆盖 declaration 到最终 expression。
+     * Verifies that AstProgram with val declarations spans from declaration to final expression.
+     */
+    @Test
+    fun `ast program with val declarations exposes covered span`() {
+        val program = parseProgram("val x = 1; x").program
+
+        assertEquals(SourceSpan("sample.kk", 0, 12), program.span)
+    }
+
+    /**
      * 验证默认二元运算符是左结合。
      * Verifies that default binary operators are left-associative.
      */
@@ -51,6 +62,43 @@ class ParserTest {
 
         assertFalse(result.hasErrors)
         assertEquals("(- (- int(10) int(3)) int(2))", result.expression.render())
+    }
+
+    /**
+     * 验证 program parser 支持 val declarations 和最终 expression。
+     * Verifies that the program parser supports val declarations and a final expression.
+     */
+    @Test
+    fun `program parser handles val declarations and final expression`() {
+        val result = parseProgram("val x = 1; val y = x + 2; y * 3")
+
+        assertFalse(result.hasErrors)
+        assertEquals("program(val x = int(1); val y = (+ id(x) int(2)); (* id(y) int(3)))", result.program.render())
+    }
+
+    /**
+     * 验证 val declaration 缺失必需 token 时产生 PARSE003。
+     * Verifies that missing required tokens in val declarations produce PARSE003.
+     */
+    @Test
+    fun `program parser reports missing val declaration separators`() {
+        val result = parseProgram("val x = 1 x")
+
+        assertTrue(result.hasErrors)
+        assertEquals(listOf("PARSE003"), result.diagnostics.map { it.code })
+        assertEquals("program(val x = int(1); id(x))", result.program.render())
+    }
+
+    /**
+     * 验证 expression 位置的赋值写法不是重新赋值语法。
+     * Verifies that assignment-like text in expression position is not reassignment syntax.
+     */
+    @Test
+    fun `program parser treats assignment like expression as trailing tokens`() {
+        val result = parseProgram("val x = 1; x = 2")
+
+        assertTrue(result.hasErrors)
+        assertEquals(listOf("PARSE002", "PARSE002"), result.diagnostics.map { it.code })
     }
 
     /**
@@ -162,6 +210,21 @@ class ParserTest {
         val parseResult = Parser(lexResult.tokens, parserConfig).parseExpressionDocument()
         return parseResult.copy(diagnostics = lexResult.diagnostics + parseResult.diagnostics)
     }
+
+    /**
+     * 使用指定 lexer/parser 配置解析一个 program。
+     * Parses one program with the provided lexer and parser configuration.
+     */
+    private fun parseProgram(
+        text: String,
+        lexerConfig: LexerConfig = LexerConfig.default(),
+        parserConfig: ParserConfig = ParserConfig.default(),
+    ): ProgramParseResult {
+        val source = SourceText.of("sample.kk", text)
+        val lexResult = Lexer(lexerConfig).tokenize(source)
+        val parseResult = Parser(lexResult.tokens, parserConfig).parseProgramDocument()
+        return parseResult.copy(diagnostics = lexResult.diagnostics + parseResult.diagnostics)
+    }
 }
 
 /**
@@ -177,3 +240,23 @@ private fun Expression.render(): String =
         is GroupedExpression -> "(group ${expression.render()})"
         is MissingExpression -> "<missing>"
     }
+
+/**
+ * 将 AST program 渲染为稳定的测试断言字符串。
+ * Renders an AST program into a stable assertion string for tests.
+ */
+private fun AstProgram.render(): String {
+    val declarationsText = declarations.joinToString(separator = " ") { it.render() }
+    return if (declarations.isEmpty()) {
+        "program(${expression.render()})"
+    } else {
+        "program($declarationsText ${expression.render()})"
+    }
+}
+
+/**
+ * 将 val declaration 渲染为稳定的测试断言字符串。
+ * Renders a val declaration into a stable assertion string for tests.
+ */
+private fun ValDeclaration.render(): String =
+    "val $name = ${initializer.render()};"

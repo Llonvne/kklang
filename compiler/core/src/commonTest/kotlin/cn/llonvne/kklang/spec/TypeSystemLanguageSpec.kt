@@ -10,6 +10,7 @@ data class TypeSystemSpec(
     val types: List<String>,
     val typedNodes: List<String>,
     val supportedForms: List<String>,
+    val bindingRules: List<String>,
     val diagnostics: List<DiagnosticSpec>,
 )
 
@@ -30,6 +31,7 @@ class TypeSystemSpecBuilder(private val name: String) {
     private val types = mutableListOf<String>()
     private val typedNodes = mutableListOf<String>()
     private val supportedForms = mutableListOf<String>()
+    private val bindingRules = mutableListOf<String>()
     private val diagnostics = mutableListOf<DiagnosticSpec>()
 
     /**
@@ -65,6 +67,14 @@ class TypeSystemSpecBuilder(private val name: String) {
     }
 
     /**
+     * 记录一个类型检查期绑定规则。
+     * Records one type-check-time binding rule.
+     */
+    fun bindingRule(name: String) {
+        bindingRules += name
+    }
+
+    /**
      * 记录一个 type-system diagnostic。
      * Records one type-system diagnostic.
      */
@@ -83,6 +93,7 @@ class TypeSystemSpecBuilder(private val name: String) {
             types = types.toList(),
             typedNodes = typedNodes.toList(),
             supportedForms = supportedForms.toList(),
+            bindingRules = bindingRules.toList(),
             diagnostics = diagnostics.toList(),
         )
 }
@@ -92,12 +103,17 @@ val minimalTypeSystemSpec = typeSystemSpec("minimal-type-system") {
 
     type("TypeRef.Int64")
 
+    typedNode("TypedProgram")
+    typedNode("TypedValDeclaration")
     typedNode("TypedExpression")
     typedNode("TypedInteger")
+    typedNode("TypedVariable")
     typedNode("TypedGrouped")
     typedNode("TypedPrefix")
     typedNode("TypedBinary")
 
+    supportedForm("val declaration")
+    supportedForm("identifier reference")
     supportedForm("integer literal")
     supportedForm("grouped expression")
     supportedForm("unary plus")
@@ -107,6 +123,10 @@ val minimalTypeSystemSpec = typeSystemSpec("minimal-type-system") {
     supportedForm("binary multiply")
     supportedForm("binary divide")
 
+    bindingRule("val declaration binds initializer type")
+    bindingRule("identifier reference uses bound val type")
+
+    diagnostic("BIND001", "duplicate immutable value")
     diagnostic("TYPE001", "unresolved identifier")
     diagnostic("TYPE002", "unsupported expression")
 }

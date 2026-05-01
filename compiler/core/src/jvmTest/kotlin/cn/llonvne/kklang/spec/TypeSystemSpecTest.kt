@@ -28,7 +28,16 @@ class TypeSystemSpecTest {
     @Test
     fun `type system dsl spec records typed ast nodes`() {
         assertEquals(
-            listOf("TypedExpression", "TypedInteger", "TypedGrouped", "TypedPrefix", "TypedBinary"),
+            listOf(
+                "TypedProgram",
+                "TypedValDeclaration",
+                "TypedExpression",
+                "TypedInteger",
+                "TypedVariable",
+                "TypedGrouped",
+                "TypedPrefix",
+                "TypedBinary",
+            ),
             minimalTypeSystemSpec.typedNodes,
         )
     }
@@ -41,6 +50,8 @@ class TypeSystemSpecTest {
     fun `type system dsl spec records supported forms`() {
         assertEquals(
             listOf(
+                "val declaration",
+                "identifier reference",
                 "integer literal",
                 "grouped expression",
                 "unary plus",
@@ -55,6 +66,18 @@ class TypeSystemSpecTest {
     }
 
     /**
+     * 验证 type-system DSL 记录绑定规则。
+     * Verifies that the type-system DSL records binding rules.
+     */
+    @Test
+    fun `type system dsl spec records binding rules`() {
+        assertEquals(
+            listOf("val declaration binds initializer type", "identifier reference uses bound val type"),
+            minimalTypeSystemSpec.bindingRules,
+        )
+    }
+
+    /**
      * 验证 Markdown type-system 规范包含 DSL 中的类型、typed 节点和 diagnostics。
      * Verifies that the Markdown type-system spec contains types, typed nodes, and diagnostics from the DSL.
      */
@@ -63,6 +86,7 @@ class TypeSystemSpecTest {
         val markdown = Path("../../spec/type-system.md").readText()
         val expectedTerms = minimalTypeSystemSpec.types +
             minimalTypeSystemSpec.typedNodes +
+            minimalTypeSystemSpec.bindingRules +
             minimalTypeSystemSpec.diagnostics.map { it.code }
 
         for (term in expectedTerms) {

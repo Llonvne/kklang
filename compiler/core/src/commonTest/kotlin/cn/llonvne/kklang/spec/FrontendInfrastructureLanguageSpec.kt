@@ -152,8 +152,11 @@ val frontendInfrastructureSpec = languageSpec("frontend-infrastructure") {
     lexer {
         token("identifier", "ASCII letter or underscore, followed by ASCII letters, digits, or underscores")
         token("integer", "one or more ASCII digits")
+        token("val", "val keyword")
         token("left_paren", "(")
         token("right_paren", ")")
+        token("equals", "=")
+        token("semicolon", ";")
         token("plus", "+")
         token("minus", "-")
         token("star", "*")
@@ -164,6 +167,8 @@ val frontendInfrastructureSpec = languageSpec("frontend-infrastructure") {
     }
 
     parser {
+        prefix("program", "val")
+        prefix("val declaration", "val")
         prefix("identifier expression", "identifier")
         prefix("integer expression", "integer")
         prefix("grouped expression", "left_paren")

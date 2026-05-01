@@ -21,8 +21,11 @@ class FrontendInfrastructureSpecTest {
             listOf(
                 "identifier",
                 "integer",
+                "val",
                 "left_paren",
                 "right_paren",
+                "equals",
+                "semicolon",
                 "plus",
                 "minus",
                 "star",
@@ -43,6 +46,8 @@ class FrontendInfrastructureSpecTest {
     fun `kotlin dsl spec records current parser surface`() {
         assertEquals(
             listOf(
+                "program",
+                "val declaration",
                 "identifier expression",
                 "integer expression",
                 "grouped expression",

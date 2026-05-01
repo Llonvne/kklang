@@ -83,10 +83,15 @@ val minimalExecutionSpec = executionSpec("minimal-execution") {
     phase("core ir lowering")
     phase("core ir evaluation")
 
+    irNode("IrProgram")
+    irNode("IrValDeclaration")
     irNode("IrInt64")
+    irNode("IrVariable")
     irNode("IrUnary")
     irNode("IrBinary")
 
+    supportedForm("immutable val declaration")
+    supportedForm("identifier reference")
     supportedForm("integer literal")
     supportedForm("grouped expression")
     supportedForm("unary plus")

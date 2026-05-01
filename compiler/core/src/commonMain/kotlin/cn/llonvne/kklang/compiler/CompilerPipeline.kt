@@ -2,6 +2,7 @@ package cn.llonvne.kklang.compiler
 
 import cn.llonvne.kklang.execution.CoreIrLowerer
 import cn.llonvne.kklang.execution.IrExpression
+import cn.llonvne.kklang.execution.IrProgram
 import cn.llonvne.kklang.execution.IrLowerer
 import cn.llonvne.kklang.frontend.SourceSpan
 import cn.llonvne.kklang.frontend.SourceText
@@ -20,15 +21,18 @@ import cn.llonvne.kklang.typechecking.TypeRef
 data class CompilationInput(val source: SourceText)
 
 /**
- * 成功编译后的最小 program，目前包装一个 Core IR expression 和根类型。
- * Minimal successfully compiled program; it currently wraps one Core IR expression and root type.
+ * 成功编译后的最小 program，目前包装一个 Core IR program 和根类型。
+ * Minimal successfully compiled program; it currently wraps one Core IR program and root type.
  */
 data class CompiledProgram(
-    val expression: IrExpression,
+    val ir: IrProgram,
     val type: TypeRef,
 ) {
+    val expression: IrExpression
+        get() = ir.expression
+
     val span: SourceSpan
-        get() = expression.span
+        get() = ir.span
 }
 
 /**
@@ -100,47 +104,47 @@ class CompilerPipeline(
         }
 
         phaseTrace += CompilerPhase.Parsing
-        val parseResult = parserFactory(lexResult.tokens).parseExpressionDocument()
+        val parseResult = parserFactory(lexResult.tokens).parseProgramDocument()
         if (parseResult.hasErrors) {
             return failure(parseResult.diagnostics, phaseTrace)
         }
 
         phaseTrace += CompilerPhase.TypeChecking
-        val typeCheckResult = typeChecker.check(parseResult.expression)
+        val typeCheckResult = typeChecker.check(parseResult.program)
         if (typeCheckResult.hasErrors) {
             return failure(typeCheckResult.diagnostics, phaseTrace)
         }
 
-        val typedExpression = typeCheckResult.expression ?: return failure(
+        val typedProgram = typeCheckResult.program ?: return failure(
             listOf(
                 Diagnostic(
                     code = "COMPILER001",
-                    message = "type checking succeeded without typed expression",
-                    span = parseResult.expression.span,
+                    message = "type checking succeeded without typed program",
+                    span = parseResult.program.span,
                 ),
             ),
             phaseTrace,
         )
 
         phaseTrace += CompilerPhase.Lowering
-        val loweringResult = lowerer.lower(typedExpression)
+        val loweringResult = lowerer.lower(typedProgram)
         if (loweringResult.hasErrors) {
             return failure(loweringResult.diagnostics, phaseTrace)
         }
 
-        val expression = loweringResult.ir ?: return failure(
+        val irProgram = loweringResult.program ?: return failure(
             listOf(
                 Diagnostic(
                     code = "COMPILER001",
-                    message = "lowering succeeded without Core IR",
-                    span = typedExpression.syntax.span,
+                    message = "lowering succeeded without Core IR program",
+                    span = typedProgram.expression.syntax.span,
                 ),
             ),
             phaseTrace,
         )
 
         return CompilationResult.Success(
-            program = CompiledProgram(expression = expression, type = typedExpression.type),
+            program = CompiledProgram(ir = irProgram, type = typedProgram.type),
             phaseTrace = phaseTrace.toList(),
         )
     }

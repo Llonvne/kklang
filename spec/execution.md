@@ -16,9 +16,9 @@ lowering, Core IR evaluation, execution result.
 The execution engine must enter lexing, parsing, and Core IR lowering through
 the compiler pipeline.
 
-本规范不定义完整 VM、对象系统、函数调用、变量绑定或类型系统。
-This spec does not define a full VM, object system, function calls, bindings, or
-type system.
+本规范不定义完整 VM、对象系统、函数调用、可变变量或完整类型系统。
+This spec does not define a full VM, object system, function calls, mutable
+variables, or a full type system.
 
 ## Result Model / 结果模型
 
@@ -54,7 +54,10 @@ The first Core IR contains only integers and integer operations.
 
 | IR / IR | Meaning / 含义 |
 | --- | --- |
+| `IrProgram` | declarations plus final expression / 声明加最终表达式 |
+| `IrValDeclaration` | immutable val declaration / 不可变 val 声明 |
 | `IrInt64` | 64-bit signed integer literal / 64 位有符号整数字面量 |
+| `IrVariable` | immutable variable reference / 不可变变量引用 |
 | `IrUnary` | unary integer operation / 一元整数运算 |
 | `IrBinary` | binary integer operation / 二元整数运算 |
 
@@ -63,6 +66,8 @@ The first Core IR contains only integers and integer operations.
 | Source form / 源码形式 | Behavior / 行为 |
 | --- | --- |
 | integer literal / 整数字面量 | returns the parsed Int64 value / 返回解析出的 Int64 值 |
+| immutable `val` declaration / 不可变 `val` 声明 | evaluates initializer once and binds the name / 对 initializer 求值一次并绑定名字 |
+| identifier reference / 标识符引用 | returns the value bound by an earlier `val` / 返回之前 `val` 绑定的值 |
 | grouped expression / 分组表达式 | evaluates the contained expression / 求值内部表达式 |
 | unary `+` / 一元 `+` | returns operand unchanged / 原样返回操作数 |
 | unary `-` / 一元 `-` | returns negated operand / 返回操作数取负 |
@@ -79,9 +84,8 @@ Division by zero must produce `EXEC002`.
 
 ## Unsupported Surface / 不支持的表面
 
-identifier expression 尚无绑定或作用域语义，必须在类型检查阶段产生 `TYPE001`。
-Identifier expressions do not have binding or scope semantics yet and must
-produce `TYPE001` during type checking.
+未绑定的 identifier expression 必须在类型检查阶段产生 `TYPE001`。
+Unbound identifier expressions must produce `TYPE001` during type checking.
 
 malformed typed expression 或 lowering 防御分支必须产生 `EXEC001`。
 Malformed typed expressions or lowering defensive branches must produce

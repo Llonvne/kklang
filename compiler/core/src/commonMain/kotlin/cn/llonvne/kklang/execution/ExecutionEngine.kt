@@ -24,7 +24,7 @@ class ExecutionEngine(
             is CompilationResult.Success -> compilation.program
         }
 
-        val evaluationResult = evaluator.evaluate(program.expression)
+        val evaluationResult = evaluator.evaluate(program.ir)
         val value = evaluationResult.value
         if (value == null) {
             return ExecutionResult.Failure(evaluationResult.diagnostics)
