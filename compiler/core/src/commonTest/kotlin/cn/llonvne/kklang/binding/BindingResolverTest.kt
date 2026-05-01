@@ -9,6 +9,7 @@ import cn.llonvne.kklang.frontend.parsing.Parser
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -30,11 +31,15 @@ class BindingResolverTest {
         assertFalse(result.hasErrors)
         val program = requireNotNull(result.program)
         assertSame(syntax, program.syntax)
-        assertSame(syntax.expression, program.expression)
+        assertSame(syntax.expression, program.expression.syntax)
         assertEquals(SourceSpan("sample.kk", 0, 27), program.span)
         assertEquals(listOf("x", "y"), program.declarations.map { it.name })
         assertEquals(listOf("x", "y"), program.symbols.map { it.name })
         assertSame(program.declarations[0].syntax, program.symbols[0].declaration)
+        assertEquals("binary(+, variable(x -> x), int64)", program.declarations[1].initializer.render())
+        assertEquals(SourceSpan("sample.kk", 19, 24), program.declarations[1].initializer.span)
+        assertEquals("variable(y -> y)", program.expression.render())
+        assertEquals(SourceSpan("sample.kk", 26, 27), program.expression.span)
     }
 
     /**
@@ -46,7 +51,31 @@ class BindingResolverTest {
         val result = resolve("val x = 1; -(x + (x))")
 
         assertFalse(result.hasErrors)
-        assertEquals(listOf("x"), requireNotNull(result.program).symbols.map { it.name })
+        val expression = requireNotNull(result.program).expression
+
+        assertEquals(listOf("x"), result.program.symbols.map { it.name })
+        assertEquals("prefix(-, grouped(binary(+, variable(x -> x), grouped(variable(x -> x)))))", expression.render())
+    }
+
+    /**
+     * 验证所有当前 bound expression 节点的 span 都委托给原始 syntax。
+     * Verifies that every current bound expression node delegates span to original syntax.
+     */
+    @Test
+    fun `bound expression spans delegate to syntax spans`() {
+        val program = requireNotNull(resolve("val x = 1; -(x + (x))").program)
+        val integer = assertIs<BoundInteger>(program.declarations.single().initializer)
+        val prefix = assertIs<BoundPrefix>(program.expression)
+        val outerGrouped = assertIs<BoundGrouped>(prefix.operand)
+        val binary = assertIs<BoundBinary>(outerGrouped.inner)
+        val variable = assertIs<BoundVariable>(binary.left)
+        val innerGrouped = assertIs<BoundGrouped>(binary.right)
+        val missing = BoundMissing(MissingExpression(SourceSpan("sample.kk", 0, 0)))
+        val nodes: List<BoundExpression> = listOf(integer, prefix, outerGrouped, binary, variable, innerGrouped, missing)
+
+        for (node in nodes) {
+            assertEquals(node.syntax.span, node.span)
+        }
     }
 
     /**
@@ -89,7 +118,9 @@ class BindingResolverTest {
         )
 
         assertFalse(result.hasErrors)
-        assertEquals(SourceSpan("sample.kk", 0, 0), requireNotNull(result.program).span)
+        val expression = assertIs<BoundMissing>(requireNotNull(result.program).expression)
+        assertEquals(SourceSpan("sample.kk", 0, 0), result.program.span)
+        assertEquals(SourceSpan("sample.kk", 0, 0), expression.span)
     }
 
     /**
@@ -120,3 +151,17 @@ class BindingResolverTest {
             .parseProgramDocument()
             .program
 }
+
+/**
+ * 将 bound AST 渲染为稳定的测试断言字符串。
+ * Renders bound AST into a stable assertion string for tests.
+ */
+private fun BoundExpression.render(): String =
+    when (this) {
+        is BoundInteger -> "int64"
+        is BoundVariable -> "variable(${syntax.name} -> ${symbol.name})"
+        is BoundGrouped -> "grouped(${inner.render()})"
+        is BoundPrefix -> "prefix(${syntax.operator.lexeme}, ${operand.render()})"
+        is BoundBinary -> "binary(${syntax.operator.lexeme}, ${left.render()}, ${right.render()})"
+        is BoundMissing -> "<missing>"
+    }

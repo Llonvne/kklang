@@ -1,15 +1,25 @@
 package cn.llonvne.kklang.typechecking
 
+import cn.llonvne.kklang.binding.BoundBinary
+import cn.llonvne.kklang.binding.BoundExpression
+import cn.llonvne.kklang.binding.BoundGrouped
+import cn.llonvne.kklang.binding.BoundInteger
+import cn.llonvne.kklang.binding.BoundMissing
+import cn.llonvne.kklang.binding.BoundPrefix
 import cn.llonvne.kklang.binding.BoundProgram
+import cn.llonvne.kklang.binding.BoundVariable
 import cn.llonvne.kklang.binding.SeedBindingResolver
 import cn.llonvne.kklang.frontend.SourceSpan
 import cn.llonvne.kklang.frontend.SourceText
 import cn.llonvne.kklang.frontend.lexing.Lexer
 import cn.llonvne.kklang.frontend.lexing.Token
 import cn.llonvne.kklang.frontend.lexing.TokenKind
+import cn.llonvne.kklang.frontend.parsing.AstProgram
 import cn.llonvne.kklang.frontend.parsing.BinaryExpression
 import cn.llonvne.kklang.frontend.parsing.Expression
 import cn.llonvne.kklang.frontend.parsing.GroupedExpression
+import cn.llonvne.kklang.frontend.parsing.IdentifierExpression
+import cn.llonvne.kklang.frontend.parsing.IntegerExpression
 import cn.llonvne.kklang.frontend.parsing.MissingExpression
 import cn.llonvne.kklang.frontend.parsing.Parser
 import cn.llonvne.kklang.frontend.parsing.PrefixExpression
@@ -17,6 +27,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
@@ -65,6 +76,10 @@ class TypeCheckerTest {
         assertEquals(listOf("x", "y"), program.declarations.map { it.name })
         assertEquals(TypeRef.Int64, program.declarations.single { it.name == "x" }.type)
         assertEquals("binary(*, variable(y), int64)", program.expression.render())
+        val yDeclaration = program.declarations.single { it.name == "y" }
+        val expression = assertIs<TypedBinary>(program.expression)
+        val variable = assertIs<TypedVariable>(expression.left)
+        assertSame(yDeclaration.symbol, variable.symbol)
     }
 
     /**
@@ -132,6 +147,51 @@ class TypeCheckerTest {
         assertEquals(listOf("TYPE002"), declarationFailure.diagnostics.map { it.code })
         assertTrue(expressionFailure.hasErrors)
         assertEquals(listOf("TYPE002"), expressionFailure.diagnostics.map { it.code })
+    }
+
+    /**
+     * 验证 malformed bound tree 中的内部失败路径会产生诊断并阻止 typed program。
+     * Verifies that inner failure paths in malformed bound trees report diagnostics and block typed programs.
+     */
+    @Test
+    fun `type checker reports malformed bound tree inner failures`() {
+        val missing = BoundMissing(MissingExpression(SourceSpan("sample.kk", 0, 0)))
+        val one = BoundInteger(assertIs<IntegerExpression>(parse("1")))
+        val plus = Lexer().tokenize(SourceText.of("sample.kk", "+")).tokens.first()
+        val minus = Lexer().tokenize(SourceText.of("sample.kk", "-")).tokens.first()
+        val leftParen = Lexer().tokenize(SourceText.of("sample.kk", "(")).tokens.first()
+        val rightParen = Lexer().tokenize(SourceText.of("sample.kk", ")")).tokens.first()
+        val grouped = BoundGrouped(GroupedExpression(leftParen, missing.syntax, rightParen), missing)
+        val prefix = BoundPrefix(PrefixExpression(minus, missing.syntax), missing)
+        val leftFailure = BoundBinary(BinaryExpression(missing.syntax, plus, one.syntax), missing, one)
+        val rightFailure = BoundBinary(BinaryExpression(one.syntax, plus, missing.syntax), one, missing)
+
+        assertEquals(listOf("TYPE002"), checkBoundExpression(grouped).diagnostics.map { it.code })
+        assertEquals(listOf("TYPE002"), checkBoundExpression(prefix).diagnostics.map { it.code })
+        assertEquals(listOf("TYPE002"), checkBoundExpression(leftFailure).diagnostics.map { it.code })
+        assertEquals(listOf("TYPE002"), checkBoundExpression(rightFailure).diagnostics.map { it.code })
+    }
+
+    /**
+     * 验证已绑定变量的符号若没有对应 scope 类型仍会被拒绝。
+     * Verifies that a bound variable is still rejected when its symbol has no matching scope type.
+     */
+    @Test
+    fun `type checker reports bound variable without scoped type`() {
+        val validProgram = boundProgram("val x = 1; x")
+        val symbol = validProgram.symbols.single()
+        val variable = BoundVariable(assertIs<IdentifierExpression>(parse("x")), symbol)
+        val result = SeedTypeChecker().check(
+            BoundProgram(
+                syntax = AstProgram(variable.syntax),
+                declarations = emptyList(),
+                expression = variable,
+                symbols = listOf(symbol),
+            ),
+        )
+
+        assertTrue(result.hasErrors)
+        assertEquals(listOf("TYPE001"), result.diagnostics.map { it.code })
     }
 
     /**
@@ -218,6 +278,13 @@ class TypeCheckerTest {
      */
     private fun boundProgram(text: String): BoundProgram =
         requireNotNull(SeedBindingResolver().resolve(parseProgram(text)).program)
+
+    /**
+     * 把单个 bound expression 包装成测试 program 后执行类型检查。
+     * Wraps one bound expression in a test program before type checking.
+     */
+    private fun checkBoundExpression(expression: BoundExpression): ProgramTypeCheckResult =
+        SeedTypeChecker().check(BoundProgram(AstProgram(expression.syntax), emptyList(), expression, emptyList()))
 
     /**
      * 使用默认 lexer/parser 解析一段测试源码。

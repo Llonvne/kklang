@@ -20,6 +20,33 @@ the original `AstProgram`, `BoundValDeclaration`, and `BindingSymbol`.
 
 DSL term / DSL 术语：`binding resolver emits BoundProgram`。
 
+`BoundProgram` 必须包含已绑定的最终 `BoundExpression`，每个 `BoundValDeclaration` 也必须包含已绑定的 initializer。
+`BoundProgram` must contain a bound final `BoundExpression`, and every
+`BoundValDeclaration` must contain a bound initializer.
+
+DSL term / DSL 术语：`binding resolver emits BoundExpression`。
+
+第一版 bound AST 节点如下。
+The first bound AST nodes are:
+
+| Node / 节点 | Meaning / 含义 |
+| --- | --- |
+| `BoundProgram` | bound program / 已绑定程序 |
+| `BoundValDeclaration` | bound immutable val declaration / 已绑定不可变 val 声明 |
+| `BindingSymbol` | immutable val symbol / 不可变 val 符号 |
+| `BoundInteger` | bound integer literal / 已绑定整数字面量 |
+| `BoundVariable` | bound variable reference carrying `BindingSymbol` / 携带 `BindingSymbol` 的已绑定变量引用 |
+| `BoundGrouped` | bound grouped expression / 已绑定分组表达式 |
+| `BoundPrefix` | bound prefix expression / 已绑定前缀表达式 |
+| `BoundBinary` | bound binary expression / 已绑定二元表达式 |
+| `BoundMissing` | parser recovery placeholder preserved for type checking / 保留给类型检查的 parser 恢复占位 |
+
+`BoundVariable` 必须携带它解析到的 `BindingSymbol`，后续阶段不得再用字符串名字重新解析该引用。
+`BoundVariable` must carry the `BindingSymbol` it resolved to; later phases
+must not resolve that reference again by string name.
+
+DSL term / DSL 术语：`BoundVariable carries BindingSymbol`。
+
 `val` 绑定完全不可重新赋值；这里的不可变语义等同于 Kotlin `val`：名字绑定后不能被赋予新值。
 `val` bindings are fully non-reassignable; immutability here follows Kotlin
 `val` semantics: after a name is bound, it cannot be assigned a new value.

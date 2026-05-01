@@ -24,6 +24,28 @@ class BindingSpecTest {
     }
 
     /**
+     * 验证 binding DSL 记录 bound AST 节点。
+     * Verifies that the binding DSL records bound AST nodes.
+     */
+    @Test
+    fun `binding dsl spec records bound ast nodes`() {
+        assertEquals(
+            listOf(
+                "BoundProgram",
+                "BoundValDeclaration",
+                "BindingSymbol",
+                "BoundInteger",
+                "BoundVariable",
+                "BoundGrouped",
+                "BoundPrefix",
+                "BoundBinary",
+                "BoundMissing",
+            ),
+            minimalBindingSpec.boundNodes,
+        )
+    }
+
+    /**
      * 验证 binding DSL 记录不可变和作用域规则。
      * Verifies that the binding DSL records immutability and scope rules.
      */
@@ -33,6 +55,8 @@ class BindingSpecTest {
             listOf(
                 "binding resolver runs before type checking",
                 "binding resolver emits BoundProgram",
+                "binding resolver emits BoundExpression",
+                "BoundVariable carries BindingSymbol",
                 "val bindings are immutable",
                 "initializer can reference earlier vals",
                 "initializer cannot reference itself or later vals",
@@ -52,6 +76,7 @@ class BindingSpecTest {
     fun `markdown binding spec contains dsl surface`() {
         val markdown = Path("../../spec/binding.md").readText()
         val expectedTerms = minimalBindingSpec.syntaxes +
+            minimalBindingSpec.boundNodes +
             minimalBindingSpec.scopeRules +
             minimalBindingSpec.diagnostics.map { it.code }
 

@@ -7,6 +7,7 @@ package cn.llonvne.kklang.spec
 data class BindingSpec(
     val name: String,
     val syntaxes: List<String>,
+    val boundNodes: List<String>,
     val scopeRules: List<String>,
     val diagnostics: List<DiagnosticSpec>,
 )
@@ -25,6 +26,7 @@ fun bindingSpec(name: String, block: BindingSpecBuilder.() -> Unit): BindingSpec
 @LanguageSpecDsl
 class BindingSpecBuilder(private val name: String) {
     private val syntaxes = mutableListOf<String>()
+    private val boundNodes = mutableListOf<String>()
     private val scopeRules = mutableListOf<String>()
     private val diagnostics = mutableListOf<DiagnosticSpec>()
 
@@ -34,6 +36,14 @@ class BindingSpecBuilder(private val name: String) {
      */
     fun syntax(name: String) {
         syntaxes += name
+    }
+
+    /**
+     * 记录一个 binding AST 节点。
+     * Records one binding AST node.
+     */
+    fun boundNode(name: String) {
+        boundNodes += name
     }
 
     /**
@@ -60,6 +70,7 @@ class BindingSpecBuilder(private val name: String) {
         BindingSpec(
             name = name,
             syntaxes = syntaxes.toList(),
+            boundNodes = boundNodes.toList(),
             scopeRules = scopeRules.toList(),
             diagnostics = diagnostics.toList(),
         )
@@ -69,8 +80,20 @@ val minimalBindingSpec = bindingSpec("minimal-binding") {
     syntax("val declaration")
     syntax("val identifier = expression;")
 
+    boundNode("BoundProgram")
+    boundNode("BoundValDeclaration")
+    boundNode("BindingSymbol")
+    boundNode("BoundInteger")
+    boundNode("BoundVariable")
+    boundNode("BoundGrouped")
+    boundNode("BoundPrefix")
+    boundNode("BoundBinary")
+    boundNode("BoundMissing")
+
     scopeRule("binding resolver runs before type checking")
     scopeRule("binding resolver emits BoundProgram")
+    scopeRule("binding resolver emits BoundExpression")
+    scopeRule("BoundVariable carries BindingSymbol")
     scopeRule("val bindings are immutable")
     scopeRule("initializer can reference earlier vals")
     scopeRule("initializer cannot reference itself or later vals")

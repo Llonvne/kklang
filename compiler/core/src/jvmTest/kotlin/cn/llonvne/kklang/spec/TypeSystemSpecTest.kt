@@ -72,7 +72,12 @@ class TypeSystemSpecTest {
     @Test
     fun `type system dsl spec records binding rules`() {
         assertEquals(
-            listOf("val declaration binds initializer type", "identifier reference uses bound val type"),
+            listOf(
+                "val declaration binds initializer type",
+                "identifier reference uses bound val type",
+                "TypedValDeclaration preserves BindingSymbol",
+                "TypedVariable preserves BindingSymbol",
+            ),
             minimalTypeSystemSpec.bindingRules,
         )
     }

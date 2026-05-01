@@ -1,6 +1,14 @@
 package cn.llonvne.kklang.typechecking
 
 import cn.llonvne.kklang.binding.BoundProgram
+import cn.llonvne.kklang.binding.BoundBinary
+import cn.llonvne.kklang.binding.BoundExpression
+import cn.llonvne.kklang.binding.BoundGrouped
+import cn.llonvne.kklang.binding.BoundInteger
+import cn.llonvne.kklang.binding.BoundMissing
+import cn.llonvne.kklang.binding.BoundPrefix
+import cn.llonvne.kklang.binding.BoundVariable
+import cn.llonvne.kklang.binding.BindingSymbol
 import cn.llonvne.kklang.binding.SeedBindingResolver
 import cn.llonvne.kklang.frontend.diagnostics.Diagnostic
 import cn.llonvne.kklang.frontend.diagnostics.DiagnosticBag
@@ -52,11 +60,12 @@ data class TypedProgram(
  */
 data class TypedValDeclaration(
     val syntax: ValDeclaration,
+    val symbol: BindingSymbol,
     val initializer: TypedExpression,
     val type: TypeRef = initializer.type,
 ) {
     val name: String
-        get() = syntax.name
+        get() = symbol.name
 }
 
 /**
@@ -74,6 +83,7 @@ data class TypedInteger(
  */
 data class TypedVariable(
     override val syntax: IdentifierExpression,
+    val symbol: BindingSymbol,
     override val type: TypeRef,
 ) : TypedExpression
 
@@ -155,14 +165,18 @@ class SeedTypeChecker : TypeChecker {
      */
     override fun check(program: BoundProgram): ProgramTypeCheckResult {
         val diagnostics = DiagnosticBag()
-        val scope = mutableMapOf<String, TypeRef>()
+        val scope = mutableMapOf<BindingSymbol, TypeRef>()
         val declarations = mutableListOf<TypedValDeclaration>()
 
         for (declaration in program.declarations) {
-            val initializer = checkExpression(declaration.syntax.initializer, scope, diagnostics)
+            val initializer = checkExpression(declaration.initializer, scope, diagnostics)
             if (initializer != null) {
-                scope[declaration.name] = initializer.type
-                declarations += TypedValDeclaration(syntax = declaration.syntax, initializer = initializer)
+                scope[declaration.symbol] = initializer.type
+                declarations += TypedValDeclaration(
+                    syntax = declaration.syntax,
+                    symbol = declaration.symbol,
+                    initializer = initializer,
+                )
             }
         }
 
@@ -196,27 +210,32 @@ class SeedTypeChecker : TypeChecker {
      * Type-checks one expression with an empty scope.
      */
     fun check(expression: Expression): TypeCheckResult {
+        val bindingResult = SeedBindingResolver().resolve(AstProgram(expression))
+        val boundExpression = bindingResult.program?.expression
+        if (boundExpression == null) {
+            return TypeCheckResult(expression = null, diagnostics = bindingResult.diagnostics)
+        }
         val diagnostics = DiagnosticBag()
-        val typed = checkExpression(expression, emptyMap(), diagnostics)
+        val typed = checkExpression(boundExpression, emptyMap(), diagnostics)
         return TypeCheckResult(expression = typed, diagnostics = diagnostics.toList())
     }
 
     /**
-     * 按 AST expression 类型分派类型检查。
-     * Dispatches type checking by AST expression type.
+     * 按 bound expression 类型分派类型检查。
+     * Dispatches type checking by bound expression type.
      */
     private fun checkExpression(
-        expression: Expression,
-        scope: Map<String, TypeRef>,
+        expression: BoundExpression,
+        scope: Map<BindingSymbol, TypeRef>,
         diagnostics: DiagnosticBag,
     ): TypedExpression? =
         when (expression) {
-            is IntegerExpression -> TypedInteger(expression)
-            is GroupedExpression -> checkGrouped(expression, scope, diagnostics)
-            is PrefixExpression -> checkPrefix(expression, scope, diagnostics)
-            is BinaryExpression -> checkBinary(expression, scope, diagnostics)
-            is IdentifierExpression -> checkIdentifier(expression, scope, diagnostics)
-            is MissingExpression -> unsupported(expression, diagnostics)
+            is BoundInteger -> TypedInteger(expression.syntax)
+            is BoundGrouped -> checkGrouped(expression, scope, diagnostics)
+            is BoundPrefix -> checkPrefix(expression, scope, diagnostics)
+            is BoundBinary -> checkBinary(expression, scope, diagnostics)
+            is BoundVariable -> checkIdentifier(expression, scope, diagnostics)
+            is BoundMissing -> unsupported(expression.syntax, diagnostics)
         }
 
     /**
@@ -224,12 +243,12 @@ class SeedTypeChecker : TypeChecker {
      * Type-checks a grouped expression and preserves the inner expression type.
      */
     private fun checkGrouped(
-        expression: GroupedExpression,
-        scope: Map<String, TypeRef>,
+        expression: BoundGrouped,
+        scope: Map<BindingSymbol, TypeRef>,
         diagnostics: DiagnosticBag,
     ): TypedExpression? {
-        val inner = checkExpression(expression.expression, scope, diagnostics) ?: return null
-        return TypedGrouped(syntax = expression, inner = inner)
+        val inner = checkExpression(expression.inner, scope, diagnostics) ?: return null
+        return TypedGrouped(syntax = expression.syntax, inner = inner)
     }
 
     /**
@@ -237,15 +256,15 @@ class SeedTypeChecker : TypeChecker {
      * Type-checks the currently supported unary prefix expression.
      */
     private fun checkPrefix(
-        expression: PrefixExpression,
-        scope: Map<String, TypeRef>,
+        expression: BoundPrefix,
+        scope: Map<BindingSymbol, TypeRef>,
         diagnostics: DiagnosticBag,
     ): TypedExpression? {
         val operand = checkExpression(expression.operand, scope, diagnostics) ?: return null
-        if (expression.operator.kind != TokenKinds.Plus && expression.operator.kind != TokenKinds.Minus) {
-            return unsupported(expression, diagnostics)
+        if (expression.syntax.operator.kind != TokenKinds.Plus && expression.syntax.operator.kind != TokenKinds.Minus) {
+            return unsupported(expression.syntax, diagnostics)
         }
-        return TypedPrefix(syntax = expression, operand = operand, type = TypeRef.Int64)
+        return TypedPrefix(syntax = expression.syntax, operand = operand, type = TypeRef.Int64)
     }
 
     /**
@@ -253,8 +272,8 @@ class SeedTypeChecker : TypeChecker {
      * Type-checks the currently supported binary expression.
      */
     private fun checkBinary(
-        expression: BinaryExpression,
-        scope: Map<String, TypeRef>,
+        expression: BoundBinary,
+        scope: Map<BindingSymbol, TypeRef>,
         diagnostics: DiagnosticBag,
     ): TypedExpression? {
         val left = checkExpression(expression.left, scope, diagnostics)
@@ -262,31 +281,31 @@ class SeedTypeChecker : TypeChecker {
         if (left == null || right == null) {
             return null
         }
-        val isSupportedOperator = expression.operator.kind == TokenKinds.Plus ||
-            expression.operator.kind == TokenKinds.Minus ||
-            expression.operator.kind == TokenKinds.Star ||
-            expression.operator.kind == TokenKinds.Slash
+        val isSupportedOperator = expression.syntax.operator.kind == TokenKinds.Plus ||
+            expression.syntax.operator.kind == TokenKinds.Minus ||
+            expression.syntax.operator.kind == TokenKinds.Star ||
+            expression.syntax.operator.kind == TokenKinds.Slash
         if (!isSupportedOperator) {
-            return unsupported(expression, diagnostics)
+            return unsupported(expression.syntax, diagnostics)
         }
-        return TypedBinary(syntax = expression, left = left, right = right, type = TypeRef.Int64)
+        return TypedBinary(syntax = expression.syntax, left = left, right = right, type = TypeRef.Int64)
     }
 
     /**
-     * 类型检查 identifier 引用，未绑定时报告 TYPE001。
-     * Type-checks an identifier reference and reports TYPE001 when it is unbound.
+     * 类型检查已绑定 identifier 引用，符号尚无类型时报告 TYPE001。
+     * Type-checks a bound identifier reference and reports TYPE001 when its symbol has no type yet.
      */
     private fun checkIdentifier(
-        expression: IdentifierExpression,
-        scope: Map<String, TypeRef>,
+        expression: BoundVariable,
+        scope: Map<BindingSymbol, TypeRef>,
         diagnostics: DiagnosticBag,
     ): TypedExpression? {
-        val type = scope[expression.name]
+        val type = scope[expression.symbol]
         return if (type == null) {
-            diagnostics.report("TYPE001", "unresolved identifier", expression.span)
+            diagnostics.report("TYPE001", "unresolved identifier", expression.syntax.span)
             null
         } else {
-            TypedVariable(syntax = expression, type = type)
+            TypedVariable(syntax = expression.syntax, symbol = expression.symbol, type = type)
         }
     }
 

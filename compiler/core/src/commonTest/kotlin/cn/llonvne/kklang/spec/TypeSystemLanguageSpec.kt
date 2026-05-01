@@ -125,6 +125,8 @@ val minimalTypeSystemSpec = typeSystemSpec("minimal-type-system") {
 
     bindingRule("val declaration binds initializer type")
     bindingRule("identifier reference uses bound val type")
+    bindingRule("TypedValDeclaration preserves BindingSymbol")
+    bindingRule("TypedVariable preserves BindingSymbol")
 
     diagnostic("TYPE001", "unresolved identifier")
     diagnostic("TYPE002", "unsupported expression")

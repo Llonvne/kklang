@@ -16,6 +16,10 @@ The type-checking phase sits between binding and Core IR lowering.
 The type-checking phase consumes only a `BoundProgram` successfully produced by
 the binding resolver.
 
+类型检查阶段必须从 `BoundExpression` 读取已经解析好的 `BindingSymbol`，不得重新按字符串名字解析变量引用。
+The type-checking phase must read already-resolved `BindingSymbol` values from
+`BoundExpression` and must not resolve variable references again by string name.
+
 Core IR lowering 只消费 typed AST，不直接决定源码表达式是否合法。
 Core IR lowering consumes only typed AST and does not directly decide whether a
 source expression is semantically valid.
@@ -50,6 +54,13 @@ Successful type checking must return `TypedExpression`.
 `TypedExpression` 必须保留原始 AST、source span 和推导出的 `TypeRef`。
 `TypedExpression` must preserve the original AST, source span, and inferred
 `TypeRef`.
+
+`TypedValDeclaration` 和 `TypedVariable` 必须保留 binding 阶段产生的 `BindingSymbol`。
+`TypedValDeclaration` and `TypedVariable` must preserve the `BindingSymbol`
+produced by the binding phase.
+
+DSL terms / DSL 术语：`TypedValDeclaration preserves BindingSymbol`；
+`TypedVariable preserves BindingSymbol`。
 
 类型检查成功时必须返回 `TypedProgram`。
 Successful type checking must return `TypedProgram`.

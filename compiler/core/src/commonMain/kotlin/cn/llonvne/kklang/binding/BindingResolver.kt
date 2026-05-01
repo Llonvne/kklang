@@ -23,12 +23,93 @@ data class BindingSymbol(
 )
 
 /**
+ * binding 后 expression 的共同接口，保留原始 AST 和来源 span。
+ * Shared interface for bound expressions, preserving original AST and source span.
+ */
+sealed interface BoundExpression {
+    val syntax: Expression
+    val span: SourceSpan
+}
+
+/**
+ * binding 后的整数字面量。
+ * Bound integer literal.
+ */
+data class BoundInteger(
+    override val syntax: IntegerExpression,
+) : BoundExpression {
+    override val span: SourceSpan
+        get() = syntax.span
+}
+
+/**
+ * binding 后的变量引用，携带解析到的符号。
+ * Bound variable reference carrying the resolved symbol.
+ */
+data class BoundVariable(
+    override val syntax: IdentifierExpression,
+    val symbol: BindingSymbol,
+) : BoundExpression {
+    override val span: SourceSpan
+        get() = syntax.span
+}
+
+/**
+ * binding 后的分组 expression。
+ * Bound grouped expression.
+ */
+data class BoundGrouped(
+    override val syntax: GroupedExpression,
+    val inner: BoundExpression,
+) : BoundExpression {
+    override val span: SourceSpan
+        get() = syntax.span
+}
+
+/**
+ * binding 后的 prefix expression。
+ * Bound prefix expression.
+ */
+data class BoundPrefix(
+    override val syntax: PrefixExpression,
+    val operand: BoundExpression,
+) : BoundExpression {
+    override val span: SourceSpan
+        get() = syntax.span
+}
+
+/**
+ * binding 后的 binary expression。
+ * Bound binary expression.
+ */
+data class BoundBinary(
+    override val syntax: BinaryExpression,
+    val left: BoundExpression,
+    val right: BoundExpression,
+) : BoundExpression {
+    override val span: SourceSpan
+        get() = syntax.span
+}
+
+/**
+ * binding 后保留的 parser recovery missing expression。
+ * Bound parser-recovery missing expression.
+ */
+data class BoundMissing(
+    override val syntax: MissingExpression,
+) : BoundExpression {
+    override val span: SourceSpan
+        get() = syntax.span
+}
+
+/**
  * binding 后的不可变 val declaration。
  * Immutable val declaration after binding.
  */
 data class BoundValDeclaration(
     val syntax: ValDeclaration,
     val symbol: BindingSymbol,
+    val initializer: BoundExpression,
 ) {
     val name: String
         get() = symbol.name
@@ -41,7 +122,7 @@ data class BoundValDeclaration(
 data class BoundProgram(
     val syntax: AstProgram,
     val declarations: List<BoundValDeclaration>,
-    val expression: Expression,
+    val expression: BoundExpression,
     val symbols: List<BindingSymbol>,
 ) {
     val span: SourceSpan
@@ -88,18 +169,18 @@ class SeedBindingResolver : BindingResolver {
 
         for (declaration in program.declarations) {
             val duplicate = symbolsByName.containsKey(declaration.name)
-            val initializerIsBound = validateExpression(declaration.initializer, symbolsByName, diagnostics)
+            val initializer = bindExpression(declaration.initializer, symbolsByName, diagnostics)
             if (duplicate) {
                 diagnostics.report("BIND001", "duplicate immutable value", declaration.nameToken.span)
             }
-            if (!duplicate && initializerIsBound) {
+            if (!duplicate && initializer != null) {
                 val symbol = BindingSymbol(name = declaration.name, declaration = declaration)
                 symbolsByName[declaration.name] = symbol
-                boundDeclarations += BoundValDeclaration(syntax = declaration, symbol = symbol)
+                boundDeclarations += BoundValDeclaration(syntax = declaration, symbol = symbol, initializer = initializer)
             }
         }
 
-        validateExpression(program.expression, symbolsByName, diagnostics)
+        val expression = bindExpression(program.expression, symbolsByName, diagnostics)
 
         val diagnosticsList = diagnostics.toList()
         if (diagnosticsList.isNotEmpty()) {
@@ -109,7 +190,7 @@ class SeedBindingResolver : BindingResolver {
             program = BoundProgram(
                 syntax = program,
                 declarations = boundDeclarations.toList(),
-                expression = program.expression,
+                expression = expression!!,
                 symbols = boundDeclarations.map { it.symbol },
             ),
             diagnostics = diagnosticsList,
@@ -117,40 +198,67 @@ class SeedBindingResolver : BindingResolver {
     }
 
     /**
-     * 按 expression 类型遍历并验证所有 identifier 引用。
-     * Walks by expression type and validates every identifier reference.
+     * 按 expression 类型遍历并生成 bound expression。
+     * Walks by expression type and builds a bound expression.
      */
-    private fun validateExpression(
+    private fun bindExpression(
         expression: Expression,
         symbolsByName: Map<String, BindingSymbol>,
         diagnostics: DiagnosticBag,
-    ): Boolean =
+    ): BoundExpression? =
         when (expression) {
-            is IntegerExpression -> true
-            is IdentifierExpression -> validateIdentifier(expression, symbolsByName, diagnostics)
-            is GroupedExpression -> validateExpression(expression.expression, symbolsByName, diagnostics)
-            is PrefixExpression -> validateExpression(expression.operand, symbolsByName, diagnostics)
+            is IntegerExpression -> BoundInteger(expression)
+            is IdentifierExpression -> bindIdentifier(expression, symbolsByName, diagnostics)
+            is GroupedExpression -> bindGrouped(expression, symbolsByName, diagnostics)
+            is PrefixExpression -> bindPrefix(expression, symbolsByName, diagnostics)
             is BinaryExpression -> {
-                val leftIsBound = validateExpression(expression.left, symbolsByName, diagnostics)
-                val rightIsBound = validateExpression(expression.right, symbolsByName, diagnostics)
-                leftIsBound && rightIsBound
+                val left = bindExpression(expression.left, symbolsByName, diagnostics)
+                val right = bindExpression(expression.right, symbolsByName, diagnostics)
+                if (left == null || right == null) null else BoundBinary(expression, left, right)
             }
-            is MissingExpression -> true
+            is MissingExpression -> BoundMissing(expression)
         }
 
     /**
-     * 验证 identifier 已经绑定；未绑定时报告当前公开的 TYPE001。
-     * Validates that an identifier is already bound; reports the current public TYPE001 when it is not.
+     * binding 分组 expression，并传播内部失败。
+     * Binds a grouped expression and propagates inner failure.
      */
-    private fun validateIdentifier(
+    private fun bindGrouped(
+        expression: GroupedExpression,
+        symbolsByName: Map<String, BindingSymbol>,
+        diagnostics: DiagnosticBag,
+    ): BoundExpression? {
+        val inner = bindExpression(expression.expression, symbolsByName, diagnostics) ?: return null
+        return BoundGrouped(syntax = expression, inner = inner)
+    }
+
+    /**
+     * binding prefix expression，并传播 operand 失败。
+     * Binds a prefix expression and propagates operand failure.
+     */
+    private fun bindPrefix(
+        expression: PrefixExpression,
+        symbolsByName: Map<String, BindingSymbol>,
+        diagnostics: DiagnosticBag,
+    ): BoundExpression? {
+        val operand = bindExpression(expression.operand, symbolsByName, diagnostics) ?: return null
+        return BoundPrefix(syntax = expression, operand = operand)
+    }
+
+    /**
+     * binding identifier；未绑定时报告当前公开的 TYPE001。
+     * Binds an identifier; reports the current public TYPE001 when it is unbound.
+     */
+    private fun bindIdentifier(
         expression: IdentifierExpression,
         symbolsByName: Map<String, BindingSymbol>,
         diagnostics: DiagnosticBag,
-    ): Boolean {
-        if (symbolsByName.containsKey(expression.name)) {
-            return true
+    ): BoundExpression? {
+        val symbol = symbolsByName[expression.name]
+        if (symbol != null) {
+            return BoundVariable(syntax = expression, symbol = symbol)
         }
         diagnostics.report("TYPE001", "unresolved identifier", expression.span)
-        return false
+        return null
     }
 }

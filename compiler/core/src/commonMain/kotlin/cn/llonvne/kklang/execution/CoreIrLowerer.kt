@@ -86,7 +86,7 @@ class CoreIrLowerer : IrLowerer {
     private fun lowerExpression(expression: TypedExpression, diagnostics: DiagnosticBag): IrExpression? =
         when (expression) {
             is TypedInteger -> lowerInteger(expression, diagnostics)
-            is TypedVariable -> IrVariable(name = expression.syntax.name, span = expression.syntax.span)
+            is TypedVariable -> IrVariable(name = expression.symbol.name, span = expression.syntax.span)
             is TypedGrouped -> lowerExpression(expression.inner, diagnostics)
             is TypedPrefix -> lowerPrefix(expression, diagnostics)
             is TypedBinary -> lowerBinary(expression, diagnostics)
