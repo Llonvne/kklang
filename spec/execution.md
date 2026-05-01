@@ -8,9 +8,9 @@ This spec defines the first minimal execution path for `kklang`.
 第一版执行链路只连接现有 seed expression grammar。
 The first execution path only connects the existing seed expression grammar.
 
-执行顺序如下：source text、lexer、parser、type checking、Core IR lowering、Core IR evaluation、execution result。
-The execution order is: source text, lexer, parser, type checking, Core IR
-lowering, Core IR evaluation, execution result.
+执行顺序如下：source text、lexer、parser、binding、type checking、Core IR lowering、Core IR evaluation、execution result。
+The execution order is: source text, lexer, parser, binding, type checking,
+Core IR lowering, Core IR evaluation, execution result.
 
 执行器必须通过 compiler pipeline 进入 lexer、parser 和 Core IR lowering。
 The execution engine must enter lexing, parsing, and Core IR lowering through
@@ -25,9 +25,9 @@ variables, or a full type system.
 执行结果必须是 `Success(value)` 或 `Failure(diagnostics)`。
 Execution result must be either `Success(value)` or `Failure(diagnostics)`.
 
-如果 lexer、parser、type checker、lowering 或 evaluator 产生诊断，执行结果必须是 failure。
-If the lexer, parser, type checker, lowering, or evaluator produces diagnostics,
-execution must return failure.
+如果 lexer、parser、binding resolver、type checker、lowering 或 evaluator 产生诊断，执行结果必须是 failure。
+If the lexer, parser, binding resolver, type checker, lowering, or evaluator
+produces diagnostics, execution must return failure.
 
 编译错误不得进入 Core IR evaluation。
 Compilation errors must not enter Core IR evaluation.
@@ -84,8 +84,9 @@ Division by zero must produce `EXEC002`.
 
 ## Unsupported Surface / 不支持的表面
 
-未绑定的 identifier expression 必须在类型检查阶段产生 `TYPE001`。
-Unbound identifier expressions must produce `TYPE001` during type checking.
+未绑定的 identifier expression 必须在 binding resolver 阶段产生 `TYPE001`。
+Unbound identifier expressions must produce `TYPE001` during binding
+resolution.
 
 malformed typed expression 或 lowering 防御分支必须产生 `EXEC001`。
 Malformed typed expressions or lowering defensive branches must produce

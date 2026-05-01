@@ -1,5 +1,7 @@
 package cn.llonvne.kklang.compiler
 
+import cn.llonvne.kklang.binding.BindingResolver
+import cn.llonvne.kklang.binding.BindingResult
 import cn.llonvne.kklang.execution.CoreIrEvaluator
 import cn.llonvne.kklang.execution.EvaluationResult
 import cn.llonvne.kklang.execution.ExecutionEngine
@@ -40,7 +42,13 @@ class CompilerPipelineTest {
 
         assertIs<CompilationResult.Success>(result)
         assertEquals(
-            listOf(CompilerPhase.Lexing, CompilerPhase.Parsing, CompilerPhase.TypeChecking, CompilerPhase.Lowering),
+            listOf(
+                CompilerPhase.Lexing,
+                CompilerPhase.Parsing,
+                CompilerPhase.Binding,
+                CompilerPhase.TypeChecking,
+                CompilerPhase.Lowering,
+            ),
             result.phaseTrace,
         )
         assertEquals(SourceSpan("sample.kk", 0, 9), result.program.span)
@@ -101,14 +109,19 @@ class CompilerPipelineTest {
     }
 
     /**
-     * 验证 parsing diagnostics 会阻止 type checker 和 lowering 运行。
-     * Verifies that parsing diagnostics prevent the type checker and lowering from running.
+     * 验证 parsing diagnostics 会阻止 binding、type checker 和 lowering 运行。
+     * Verifies that parsing diagnostics prevent binding, the type checker, and lowering from running.
      */
     @Test
     fun `pipeline stops before type checking when parsing fails`() {
+        var bindingResolverWasCalled = false
         var typeCheckerWasCalled = false
         var lowererWasCalled = false
         val result = CompilerPipeline(
+            bindingResolver = BindingResolver {
+                bindingResolverWasCalled = true
+                BindingResult(null, emptyList())
+            },
             typeChecker = TypeChecker {
                 typeCheckerWasCalled = true
                 ProgramTypeCheckResult(null, emptyList())
@@ -125,6 +138,36 @@ class CompilerPipelineTest {
         assertIs<CompilationResult.Failure>(result)
         assertEquals(listOf(CompilerPhase.Lexing, CompilerPhase.Parsing), result.phaseTrace)
         assertEquals(listOf("PARSE001"), result.diagnostics.map { it.code })
+        assertFalse(bindingResolverWasCalled)
+        assertFalse(typeCheckerWasCalled)
+        assertFalse(lowererWasCalled)
+    }
+
+    /**
+     * 验证 binding diagnostics 会阻止 type checker 和 lowering 运行。
+     * Verifies that binding diagnostics prevent the type checker and lowering from running.
+     */
+    @Test
+    fun `pipeline stops before type checking when binding fails`() {
+        var typeCheckerWasCalled = false
+        var lowererWasCalled = false
+        val result = CompilerPipeline(
+            typeChecker = TypeChecker {
+                typeCheckerWasCalled = true
+                ProgramTypeCheckResult(null, emptyList())
+            },
+            lowerer = IrLowerer {
+                lowererWasCalled = true
+                IrLoweringResult(
+                    IrProgram(emptyList(), IrInt64(1, it.expression.syntax.span)),
+                    emptyList(),
+                )
+            },
+        ).compile(CompilationInput(SourceText.of("sample.kk", "name")))
+
+        assertIs<CompilationResult.Failure>(result)
+        assertEquals(listOf(CompilerPhase.Lexing, CompilerPhase.Parsing, CompilerPhase.Binding), result.phaseTrace)
+        assertEquals(listOf("TYPE001"), result.diagnostics.map { it.code })
         assertFalse(typeCheckerWasCalled)
         assertFalse(lowererWasCalled)
     }
@@ -136,8 +179,14 @@ class CompilerPipelineTest {
     @Test
     fun `pipeline stops before lowering when type checking fails`() {
         var lowererWasCalled = false
-        val source = SourceText.of("sample.kk", "name")
+        val source = SourceText.of("sample.kk", "1")
         val result = CompilerPipeline(
+            typeChecker = TypeChecker {
+                ProgramTypeCheckResult(
+                    program = null,
+                    diagnostics = listOf(Diagnostic("TYPE002", "type failure", it.expression.span)),
+                )
+            },
             lowerer = IrLowerer {
                 lowererWasCalled = true
                 IrLoweringResult(
@@ -148,8 +197,11 @@ class CompilerPipelineTest {
         ).compile(CompilationInput(source))
 
         assertIs<CompilationResult.Failure>(result)
-        assertEquals(listOf(CompilerPhase.Lexing, CompilerPhase.Parsing, CompilerPhase.TypeChecking), result.phaseTrace)
-        assertEquals(listOf("TYPE001"), result.diagnostics.map { it.code })
+        assertEquals(
+            listOf(CompilerPhase.Lexing, CompilerPhase.Parsing, CompilerPhase.Binding, CompilerPhase.TypeChecking),
+            result.phaseTrace,
+        )
+        assertEquals(listOf("TYPE002"), result.diagnostics.map { it.code })
         assertFalse(lowererWasCalled)
     }
 
@@ -171,10 +223,31 @@ class CompilerPipelineTest {
 
         assertIs<CompilationResult.Failure>(result)
         assertEquals(
-            listOf(CompilerPhase.Lexing, CompilerPhase.Parsing, CompilerPhase.TypeChecking, CompilerPhase.Lowering),
+            listOf(
+                CompilerPhase.Lexing,
+                CompilerPhase.Parsing,
+                CompilerPhase.Binding,
+                CompilerPhase.TypeChecking,
+                CompilerPhase.Lowering,
+            ),
             result.phaseTrace,
         )
         assertEquals(listOf("EXEC001"), result.diagnostics.map { it.code })
+    }
+
+    /**
+     * 验证 binding resolver 违反内部契约时会被转换为 COMPILER001。
+     * Verifies that a binding-resolver contract violation is converted into COMPILER001.
+     */
+    @Test
+    fun `pipeline rejects binding resolver success without bound program`() {
+        val result = CompilerPipeline(
+            bindingResolver = BindingResolver { BindingResult(null, emptyList()) },
+        ).compile(CompilationInput(SourceText.of("sample.kk", "1")))
+
+        assertIs<CompilationResult.Failure>(result)
+        assertEquals(listOf("COMPILER001"), result.diagnostics.map { it.code })
+        assertEquals(listOf(CompilerPhase.Lexing, CompilerPhase.Parsing, CompilerPhase.Binding), result.phaseTrace)
     }
 
     /**

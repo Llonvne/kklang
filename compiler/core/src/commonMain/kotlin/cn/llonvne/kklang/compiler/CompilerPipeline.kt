@@ -1,5 +1,7 @@
 package cn.llonvne.kklang.compiler
 
+import cn.llonvne.kklang.binding.BindingResolver
+import cn.llonvne.kklang.binding.SeedBindingResolver
 import cn.llonvne.kklang.execution.CoreIrLowerer
 import cn.llonvne.kklang.execution.IrExpression
 import cn.llonvne.kklang.execution.IrProgram
@@ -42,6 +44,7 @@ data class CompiledProgram(
 enum class CompilerPhase {
     Lexing,
     Parsing,
+    Binding,
     TypeChecking,
     Lowering,
 }
@@ -81,12 +84,13 @@ sealed interface CompilationResult {
 }
 
 /**
- * 最小编译管线，按 lexing、parsing、type checking、lowering 顺序运行并在诊断出现时短路。
- * Minimal compiler pipeline that runs lexing, parsing, type checking, and lowering in order and short-circuits on diagnostics.
+ * 最小编译管线，按 lexing、parsing、binding、type checking、lowering 顺序运行并在诊断出现时短路。
+ * Minimal compiler pipeline that runs lexing, parsing, binding, type checking, and lowering in order and short-circuits on diagnostics.
  */
 class CompilerPipeline(
     private val lexer: Lexer = Lexer(),
     private val parserFactory: (List<Token>) -> Parser = { Parser(it) },
+    private val bindingResolver: BindingResolver = SeedBindingResolver(),
     private val typeChecker: TypeChecker = SeedTypeChecker(),
     private val lowerer: IrLowerer = CoreIrLowerer(),
 ) {
@@ -109,8 +113,25 @@ class CompilerPipeline(
             return failure(parseResult.diagnostics, phaseTrace)
         }
 
+        phaseTrace += CompilerPhase.Binding
+        val bindingResult = bindingResolver.resolve(parseResult.program)
+        if (bindingResult.hasErrors) {
+            return failure(bindingResult.diagnostics, phaseTrace)
+        }
+
+        val boundProgram = bindingResult.program ?: return failure(
+            listOf(
+                Diagnostic(
+                    code = "COMPILER001",
+                    message = "binding succeeded without BoundProgram",
+                    span = parseResult.program.span,
+                ),
+            ),
+            phaseTrace,
+        )
+
         phaseTrace += CompilerPhase.TypeChecking
-        val typeCheckResult = typeChecker.check(parseResult.program)
+        val typeCheckResult = typeChecker.check(boundProgram)
         if (typeCheckResult.hasErrors) {
             return failure(typeCheckResult.diagnostics, phaseTrace)
         }

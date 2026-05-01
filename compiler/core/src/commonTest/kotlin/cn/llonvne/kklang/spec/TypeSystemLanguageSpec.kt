@@ -67,8 +67,8 @@ class TypeSystemSpecBuilder(private val name: String) {
     }
 
     /**
-     * 记录一个类型检查期绑定规则。
-     * Records one type-check-time binding rule.
+     * 记录一个已绑定名字的类型规则。
+     * Records one type rule for an already-bound name.
      */
     fun bindingRule(name: String) {
         bindingRules += name
@@ -126,7 +126,6 @@ val minimalTypeSystemSpec = typeSystemSpec("minimal-type-system") {
     bindingRule("val declaration binds initializer type")
     bindingRule("identifier reference uses bound val type")
 
-    diagnostic("BIND001", "duplicate immutable value")
     diagnostic("TYPE001", "unresolved identifier")
     diagnostic("TYPE002", "unsupported expression")
 }

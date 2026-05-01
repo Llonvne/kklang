@@ -12,10 +12,10 @@ execution backends.
 当前管线只处理已有的 seed expression grammar。
 The current pipeline only handles the existing seed expression grammar.
 
-当前管线只定义最小类型检查骨架，不定义优化、字节码生成、对象布局或完整模块系统。
-The current pipeline defines only the minimal type-checking skeleton; it does
-not define optimization, bytecode generation, object layout, or a full module
-system.
+当前管线只定义最小 binding 和类型检查骨架，不定义优化、字节码生成、对象布局或完整模块系统。
+The current pipeline defines only the minimal binding and type-checking
+skeletons; it does not define optimization, bytecode generation, object layout,
+or a full module system.
 
 ## Inputs And Outputs / 输入与输出
 
@@ -58,8 +58,9 @@ Compiler phases must run in this order.
 
 1. lexing / 词法分析
 2. parsing / 语法分析
-3. type checking / 类型检查
-4. lowering / Core IR 降级
+3. binding / 绑定
+4. type checking / 类型检查
+5. lowering / Core IR 降级
 
 如果某个阶段产生 diagnostics，管线必须立即停止，不得运行后续阶段。
 If any phase produces diagnostics, the pipeline must stop immediately and must
@@ -70,9 +71,9 @@ Both success and failure results must expose the phase trace that actually ran.
 
 ## Diagnostics / 诊断
 
-编译管线本身不改写 lexer、parser 或 lowering diagnostics。
-The compiler pipeline itself does not rewrite lexer, parser, or lowering
-diagnostics.
+编译管线本身不改写 lexer、parser、binding、type checker 或 lowering diagnostics。
+The compiler pipeline itself does not rewrite lexer, parser, binding,
+type-checker, or lowering diagnostics.
 
 诊断的 `SourceSpan` 必须保持原始阶段产生的值。
 Diagnostic `SourceSpan` values must preserve the values produced by the

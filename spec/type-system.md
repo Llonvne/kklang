@@ -9,8 +9,12 @@ This spec defines the first minimal type-system skeleton for `kklang`.
 The first type system only serves the existing seed expression grammar and does
 not add language syntax.
 
-类型检查阶段位于 parsing 和 Core IR lowering 之间。
-The type-checking phase sits between parsing and Core IR lowering.
+类型检查阶段位于 binding 和 Core IR lowering 之间。
+The type-checking phase sits between binding and Core IR lowering.
+
+类型检查阶段只消费 binding resolver 成功产生的 `BoundProgram`。
+The type-checking phase consumes only a `BoundProgram` successfully produced by
+the binding resolver.
 
 Core IR lowering 只消费 typed AST，不直接决定源码表达式是否合法。
 Core IR lowering consumes only typed AST and does not directly decide whether a
@@ -25,13 +29,13 @@ The first version defines only `TypeRef.Int64`.
 Integer literals, grouped expressions, unary integer operations, and binary
 integer operations all have type `TypeRef.Int64`.
 
-解析成功的 `val` declaration 会把名字绑定到 initializer 的类型。
-A successfully parsed `val` declaration binds its name to the initializer type.
+binding 成功的 `val` declaration 会把名字绑定到 initializer 的类型。
+A successfully bound `val` declaration binds its name to the initializer type.
 
 DSL term / DSL 术语：`val declaration binds initializer type`。
 
-已解析的 identifier expression 如果引用已绑定 `val`，它的类型等于该 `val` 的类型。
-A resolved identifier expression has the same type as the `val` it references.
+已绑定的 identifier expression 如果引用已绑定 `val`，它的类型等于该 `val` 的类型。
+A bound identifier expression has the same type as the `val` it references.
 
 DSL term / DSL 术语：`identifier reference uses bound val type`。
 
@@ -83,9 +87,9 @@ Currently supported typed source forms:
 
 ## Unsupported Surface / 不支持表面
 
-identifier expression 尚无绑定或作用域语义，必须在类型检查阶段产生 `TYPE001`。
-Identifier expressions do not yet have binding or scope semantics and must
-produce `TYPE001` during type checking.
+未解析 identifier expression 必须在 binding resolver 阶段产生 `TYPE001`，不得进入类型检查。
+Unresolved identifier expressions must produce `TYPE001` in the binding
+resolver phase and must not enter type checking.
 
 parser 恢复产生的 missing expression 或未定义 AST 形态必须产生 `TYPE002`。
 Missing expressions produced by parser recovery or undefined AST forms must
@@ -98,6 +102,5 @@ Operators outside the current seed expression grammar must produce `TYPE002`.
 
 | Code / 代码 | Meaning / 含义 |
 | --- | --- |
-| `TYPE001` | unresolved identifier / 未解析标识符 |
+| `TYPE001` | unresolved identifier emitted by binding before type checking / 类型检查前由 binding 发出的未解析标识符 |
 | `TYPE002` | unsupported expression for current type-system scope / 当前类型系统范围不支持的表达式 |
-| `BIND001` | duplicate immutable value in the current program scope / 当前 program scope 中重复声明不可变值 |

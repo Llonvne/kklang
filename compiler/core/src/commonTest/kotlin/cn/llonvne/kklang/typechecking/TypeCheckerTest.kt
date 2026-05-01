@@ -1,5 +1,7 @@
 package cn.llonvne.kklang.typechecking
 
+import cn.llonvne.kklang.binding.BoundProgram
+import cn.llonvne.kklang.binding.SeedBindingResolver
 import cn.llonvne.kklang.frontend.SourceSpan
 import cn.llonvne.kklang.frontend.SourceText
 import cn.llonvne.kklang.frontend.lexing.Lexer
@@ -66,11 +68,11 @@ class TypeCheckerTest {
     }
 
     /**
-     * 验证 val initializer 可以引用之前的 val，但不能引用自身或后续 val。
-     * Verifies that a val initializer can reference earlier vals but cannot reference itself or later vals.
+     * 验证 program 便捷入口会先执行 binding 顺序检查。
+     * Verifies that the program convenience entry point runs binding order checks first.
      */
     @Test
-    fun `type checker enforces declaration order`() {
+    fun `type checker program entrypoint runs binding order checks`() {
         val earlier = checkProgram("val x = 1; val y = x; y")
         val self = checkProgram("val x = x; 1")
         val later = checkProgram("val x = y; val y = 1; x")
@@ -81,11 +83,11 @@ class TypeCheckerTest {
     }
 
     /**
-     * 验证同一 program scope 重复声明 val 会失败。
-     * Verifies that redeclaring a val in the same program scope fails.
+     * 验证 program 便捷入口会先返回 binding 的重复声明 diagnostic。
+     * Verifies that the program convenience entry point returns binding duplicate diagnostics first.
      */
     @Test
-    fun `type checker rejects duplicate immutable vals`() {
+    fun `type checker program entrypoint returns duplicate binding diagnostics`() {
         val result = checkProgram("val x = 1; val x = 2; x")
 
         assertTrue(result.hasErrors)
@@ -93,8 +95,8 @@ class TypeCheckerTest {
     }
 
     /**
-     * 验证标识符在类型检查阶段产生 unresolved identifier diagnostic。
-     * Verifies that identifiers produce an unresolved-identifier diagnostic during type checking.
+     * 验证单 expression 便捷入口在空 scope 下仍会报告 unresolved identifier。
+     * Verifies that the single-expression convenience entry point still reports unresolved identifiers in an empty scope.
      */
     @Test
     fun `type checker reports unresolved identifiers`() {
@@ -115,6 +117,21 @@ class TypeCheckerTest {
 
         assertTrue(result.hasErrors)
         assertEquals(listOf("TYPE002"), result.diagnostics.map { it.code })
+    }
+
+    /**
+     * 验证已绑定 program 中 declaration 或最终 expression 的类型失败都会让 program 失败。
+     * Verifies that type failures in declarations or the final expression fail an already bound program.
+     */
+    @Test
+    fun `type checker reports bound program declaration and final expression failures`() {
+        val declarationFailure = SeedTypeChecker().check(boundProgram("val x = ; 1"))
+        val expressionFailure = SeedTypeChecker().check(boundProgram("val x = 1;"))
+
+        assertTrue(declarationFailure.hasErrors)
+        assertEquals(listOf("TYPE002"), declarationFailure.diagnostics.map { it.code })
+        assertTrue(expressionFailure.hasErrors)
+        assertEquals(listOf("TYPE002"), expressionFailure.diagnostics.map { it.code })
     }
 
     /**
@@ -194,6 +211,13 @@ class TypeCheckerTest {
      */
     private fun checkProgram(text: String): ProgramTypeCheckResult =
         SeedTypeChecker().check(parseProgram(text))
+
+    /**
+     * 解析并 binding 一个测试 program。
+     * Parses and binds one test program.
+     */
+    private fun boundProgram(text: String): BoundProgram =
+        requireNotNull(SeedBindingResolver().resolve(parseProgram(text)).program)
 
     /**
      * 使用默认 lexer/parser 解析一段测试源码。

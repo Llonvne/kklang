@@ -8,6 +8,18 @@ This spec defines the first variable-binding mechanism for `kklang`.
 第一版只引入 Kotlin 风格 `val` declaration。
 The first version introduces only Kotlin-style `val` declarations.
 
+binding resolver 是 parsing 之后、type checking 之前的语言核心阶段。
+The binding resolver is a language-core phase after parsing and before type
+checking.
+
+DSL term / DSL 术语：`binding resolver runs before type checking`。
+
+binding resolver 成功时必须产生 `BoundProgram`，并保留原始 `AstProgram`、`BoundValDeclaration` 和 `BindingSymbol`。
+On success, the binding resolver must produce `BoundProgram` while preserving
+the original `AstProgram`, `BoundValDeclaration`, and `BindingSymbol`.
+
+DSL term / DSL 术语：`binding resolver emits BoundProgram`。
+
 `val` 绑定完全不可重新赋值；这里的不可变语义等同于 Kotlin `val`：名字绑定后不能被赋予新值。
 `val` bindings are fully non-reassignable; immutability here follows Kotlin
 `val` semantics: after a name is bound, it cannot be assigned a new value.
@@ -54,6 +66,12 @@ A `val` initializer may not reference itself or later declarations.
 
 DSL term / DSL 术语：`initializer cannot reference itself or later vals`。
 
+未解析 identifier 必须在 binding resolver 阶段被拒绝，并继续使用当前公开 diagnostic code `TYPE001`。
+Unresolved identifiers must be rejected by the binding resolver while retaining
+the current public diagnostic code `TYPE001`.
+
+DSL term / DSL 术语：`unresolved identifiers are rejected`。
+
 同一个 program scope 中重复声明同名 `val` 必须失败。
 Redeclaring the same `val` name in the same program scope must fail.
 
@@ -75,3 +93,4 @@ parser must treat it as trailing tokens after a complete expression.
 | Code / 代码 | Meaning / 含义 |
 | --- | --- |
 | `BIND001` | duplicate immutable value in the current program scope / 当前 program scope 中重复声明不可变值 |
+| `TYPE001` | unresolved identifier / 未解析标识符 |

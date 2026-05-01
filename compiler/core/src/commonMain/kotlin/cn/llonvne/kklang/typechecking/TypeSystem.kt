@@ -1,5 +1,7 @@
 package cn.llonvne.kklang.typechecking
 
+import cn.llonvne.kklang.binding.BoundProgram
+import cn.llonvne.kklang.binding.SeedBindingResolver
 import cn.llonvne.kklang.frontend.diagnostics.Diagnostic
 import cn.llonvne.kklang.frontend.diagnostics.DiagnosticBag
 import cn.llonvne.kklang.frontend.lexing.TokenKinds
@@ -131,40 +133,36 @@ data class ProgramTypeCheckResult(
 }
 
 /**
- * AST program 到 typed program 的可替换类型检查接口。
- * Replaceable type-checking interface from AST programs to typed programs.
+ * BoundProgram 到 typed program 的可替换类型检查接口。
+ * Replaceable type-checking interface from BoundProgram to typed programs.
  */
 fun interface TypeChecker {
     /**
-     * 检查一个 AST program 并返回 typed program 或 diagnostics。
-     * Checks one AST program and returns either a typed program or diagnostics.
+     * 检查一个 BoundProgram 并返回 typed program 或 diagnostics。
+     * Checks one BoundProgram and returns either a typed program or diagnostics.
      */
-    fun check(program: AstProgram): ProgramTypeCheckResult
+    fun check(program: BoundProgram): ProgramTypeCheckResult
 }
 
 /**
- * 当前 seed expression grammar 的最小 type checker。
- * Minimal type checker for the current seed expression grammar.
+ * 当前 seed expression grammar 的最小 type checker，主入口消费 BoundProgram。
+ * Minimal type checker for the current seed expression grammar, with BoundProgram as the main entry point.
  */
 class SeedTypeChecker : TypeChecker {
     /**
-     * 类型检查 program，并在过程中收集 binding/type diagnostics。
-     * Type-checks a program while collecting binding and type diagnostics.
+     * 类型检查已绑定 program，并在过程中收集 type diagnostics。
+     * Type-checks a bound program while collecting type diagnostics.
      */
-    override fun check(program: AstProgram): ProgramTypeCheckResult {
+    override fun check(program: BoundProgram): ProgramTypeCheckResult {
         val diagnostics = DiagnosticBag()
         val scope = mutableMapOf<String, TypeRef>()
         val declarations = mutableListOf<TypedValDeclaration>()
 
         for (declaration in program.declarations) {
-            val duplicate = scope.containsKey(declaration.name)
-            val initializer = checkExpression(declaration.initializer, scope, diagnostics)
-            if (duplicate) {
-                diagnostics.report("BIND001", "duplicate immutable value", declaration.nameToken.span)
-            }
-            if (!duplicate && initializer != null) {
+            val initializer = checkExpression(declaration.syntax.initializer, scope, diagnostics)
+            if (initializer != null) {
                 scope[declaration.name] = initializer.type
-                declarations += TypedValDeclaration(syntax = declaration, initializer = initializer)
+                declarations += TypedValDeclaration(syntax = declaration.syntax, initializer = initializer)
             }
         }
 
@@ -178,6 +176,19 @@ class SeedTypeChecker : TypeChecker {
             program = TypedProgram(declarations = declarations.toList(), expression = expression),
             diagnostics = diagnosticsList,
         )
+    }
+
+    /**
+     * 先对 AST program 执行默认 binding，再类型检查成功绑定的 program。
+     * Runs default binding for an AST program first, then type-checks the successfully bound program.
+     */
+    fun check(program: AstProgram): ProgramTypeCheckResult {
+        val bindingResult = SeedBindingResolver().resolve(program)
+        val boundProgram = bindingResult.program
+        if (boundProgram == null) {
+            return ProgramTypeCheckResult(program = null, diagnostics = bindingResult.diagnostics)
+        }
+        return check(boundProgram)
     }
 
     /**

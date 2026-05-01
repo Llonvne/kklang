@@ -31,9 +31,12 @@ class BindingSpecTest {
     fun `binding dsl spec records immutable scope rules`() {
         assertEquals(
             listOf(
+                "binding resolver runs before type checking",
+                "binding resolver emits BoundProgram",
                 "val bindings are immutable",
                 "initializer can reference earlier vals",
                 "initializer cannot reference itself or later vals",
+                "unresolved identifiers are rejected",
                 "same-scope duplicate val is rejected",
                 "assignment expression is not part of the grammar",
             ),

@@ -69,11 +69,15 @@ val minimalBindingSpec = bindingSpec("minimal-binding") {
     syntax("val declaration")
     syntax("val identifier = expression;")
 
+    scopeRule("binding resolver runs before type checking")
+    scopeRule("binding resolver emits BoundProgram")
     scopeRule("val bindings are immutable")
     scopeRule("initializer can reference earlier vals")
     scopeRule("initializer cannot reference itself or later vals")
+    scopeRule("unresolved identifiers are rejected")
     scopeRule("same-scope duplicate val is rejected")
     scopeRule("assignment expression is not part of the grammar")
 
     diagnostic("BIND001", "duplicate immutable value")
+    diagnostic("TYPE001", "unresolved identifier")
 }

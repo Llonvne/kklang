@@ -18,7 +18,7 @@ class ExecutionSpecTest {
     @Test
     fun `execution dsl spec records pipeline phases`() {
         assertEquals(
-            listOf("lexer", "parser", "type checking", "core ir lowering", "core ir evaluation"),
+            listOf("lexer", "parser", "binding", "type checking", "core ir lowering", "core ir evaluation"),
             minimalExecutionSpec.phases,
         )
     }
