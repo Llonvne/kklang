@@ -33,7 +33,7 @@ class CoreIrEvaluator : IrEvaluator {
         val operand = evaluateExpression(expression.operand, diagnostics)?.asInt64() ?: return null
         return when (expression.operator) {
             IrUnaryOperator.Plus -> ExecutionValue.Int64(operand)
-            IrUnaryOperator.Minus -> checked(expression, diagnostics) { Math.negateExact(operand) }
+            IrUnaryOperator.Minus -> negate(expression, operand, diagnostics)
         }
     }
 
@@ -45,11 +45,61 @@ class CoreIrEvaluator : IrEvaluator {
         }
 
         return when (expression.operator) {
-            IrBinaryOperator.Plus -> checked(expression, diagnostics) { Math.addExact(left, right) }
-            IrBinaryOperator.Minus -> checked(expression, diagnostics) { Math.subtractExact(left, right) }
-            IrBinaryOperator.Multiply -> checked(expression, diagnostics) { Math.multiplyExact(left, right) }
+            IrBinaryOperator.Plus -> add(expression, left, right, diagnostics)
+            IrBinaryOperator.Minus -> subtract(expression, left, right, diagnostics)
+            IrBinaryOperator.Multiply -> multiply(expression, left, right, diagnostics)
             IrBinaryOperator.Divide -> divide(expression, left, right, diagnostics)
         }
+    }
+
+    private fun negate(
+        expression: IrUnary,
+        operand: Long,
+        diagnostics: DiagnosticBag,
+    ): ExecutionValue? {
+        if (operand == Long.MIN_VALUE) {
+            return overflow(expression, diagnostics)
+        }
+        return ExecutionValue.Int64(-operand)
+    }
+
+    private fun add(
+        expression: IrBinary,
+        left: Long,
+        right: Long,
+        diagnostics: DiagnosticBag,
+    ): ExecutionValue? {
+        val result = left + right
+        if (((left xor result) and (right xor result)) < 0) {
+            return overflow(expression, diagnostics)
+        }
+        return ExecutionValue.Int64(result)
+    }
+
+    private fun subtract(
+        expression: IrBinary,
+        left: Long,
+        right: Long,
+        diagnostics: DiagnosticBag,
+    ): ExecutionValue? {
+        val result = left - right
+        if (((left xor right) and (left xor result)) < 0) {
+            return overflow(expression, diagnostics)
+        }
+        return ExecutionValue.Int64(result)
+    }
+
+    private fun multiply(
+        expression: IrBinary,
+        left: Long,
+        right: Long,
+        diagnostics: DiagnosticBag,
+    ): ExecutionValue? {
+        val result = left * right
+        if (left != 0L && result / left != right) {
+            return overflow(expression, diagnostics)
+        }
+        return ExecutionValue.Int64(result)
     }
 
     private fun divide(
@@ -62,20 +112,19 @@ class CoreIrEvaluator : IrEvaluator {
             diagnostics.report("EXEC002", "division by zero", expression.span)
             return null
         }
-        return checked(expression, diagnostics) { left / right }
+        if (left == Long.MIN_VALUE && right == -1L) {
+            return overflow(expression, diagnostics)
+        }
+        return ExecutionValue.Int64(left / right)
     }
 
-    private fun checked(
+    private fun overflow(
         expression: IrExpression,
         diagnostics: DiagnosticBag,
-        operation: () -> Long,
-    ): ExecutionValue? =
-        try {
-            ExecutionValue.Int64(operation())
-        } catch (_: ArithmeticException) {
-            diagnostics.report("EXEC003", "Int64 overflow", expression.span)
-            null
-        }
+    ): ExecutionValue? {
+        diagnostics.report("EXEC003", "Int64 overflow", expression.span)
+        return null
+    }
 
     private fun ExecutionValue.asInt64(): Long =
         when (this) {

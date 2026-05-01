@@ -46,7 +46,7 @@ class RuntimeSpecTest {
 
     @Test
     fun `markdown runtime spec contains dsl status functions and value tags`() {
-        val markdown = Path("spec/runtime.md").readText()
+        val markdown = Path("../../spec/runtime.md").readText()
         val expectedTerms = minimalRuntimeSpec.statuses.map { it.name } +
             minimalRuntimeSpec.abiFunctions.map { it.name } +
             minimalRuntimeSpec.valueTags.map { it.name } +
@@ -57,4 +57,3 @@ class RuntimeSpecTest {
         }
     }
 }
-

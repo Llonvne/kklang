@@ -21,12 +21,14 @@ class ExecutionEngineTest {
     fun `engine executes grouping prefix subtraction and division`() {
         assertEquals(ExecutionValue.Int64(-7), executeValue("-(10 - 3)"))
         assertEquals(ExecutionValue.Int64(2), executeValue("8 / 3"))
+        assertEquals(ExecutionValue.Int64(Long.MIN_VALUE), executeValue("(-9223372036854775807 - 1) / 1"))
+        assertEquals(ExecutionValue.Int64(0), executeValue("0 * 9223372036854775807"))
         assertEquals(ExecutionValue.Int64(1), executeValue("+1"))
     }
 
     @Test
     fun `engine returns lexer parser and lowering failures without evaluation`() {
-        assertFailureCodes("@", "LEX001", "PARSE001")
+        assertFailureCodes("@", "LEX001")
         assertFailureCodes("1 +", "PARSE001")
         assertFailureCodes("name", "EXEC001")
     }
@@ -38,6 +40,8 @@ class ExecutionEngineTest {
         assertFailureCodes("-9223372036854775808", "EXEC003")
         assertFailureCodes("9223372036854775807 * 2", "EXEC003")
         assertFailureCodes("-9223372036854775808 - 1", "EXEC003")
+        assertFailureCodes("(-9223372036854775807 - 1) - 1", "EXEC003")
+        assertFailureCodes("(-9223372036854775807 - 1) / -1", "EXEC003")
     }
 
     @Test
@@ -52,27 +56,18 @@ class ExecutionEngineTest {
     }
 
     @Test
-    fun `engine handles defensive lowerer and evaluator failure combinations`() {
+    fun `engine handles defensive evaluator failure combinations`() {
         val source = SourceText.of("sample.kk", "1")
         val diagnostic = Diagnostic("EXEC001", "unsupported expression", source.positionSpan())
-        val ir = IrInt64(1, source.positionSpan())
         val value = ExecutionValue.Int64(1)
 
         assertEquals(
             listOf("EXEC001"),
-            failureCodes(ExecutionEngine(lowerer = IrLowerer { IrLoweringResult(null, listOf(diagnostic)) }, evaluator = CoreIrEvaluator()), source),
+            failureCodes(ExecutionEngine(evaluator = IrEvaluator { EvaluationResult(null, listOf(diagnostic)) }), source),
         )
         assertEquals(
             listOf("EXEC001"),
-            failureCodes(ExecutionEngine(lowerer = IrLowerer { IrLoweringResult(ir, listOf(diagnostic)) }, evaluator = CoreIrEvaluator()), source),
-        )
-        assertEquals(
-            listOf("EXEC001"),
-            failureCodes(ExecutionEngine(lowerer = CoreIrLowerer(), evaluator = IrEvaluator { EvaluationResult(null, listOf(diagnostic)) }), source),
-        )
-        assertEquals(
-            listOf("EXEC001"),
-            failureCodes(ExecutionEngine(lowerer = CoreIrLowerer(), evaluator = IrEvaluator { EvaluationResult(value, listOf(diagnostic)) }), source),
+            failureCodes(ExecutionEngine(evaluator = IrEvaluator { EvaluationResult(value, listOf(diagnostic)) }), source),
         )
     }
 

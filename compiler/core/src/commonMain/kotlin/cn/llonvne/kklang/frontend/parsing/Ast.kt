@@ -7,6 +7,11 @@ sealed interface Expression {
     val span: SourceSpan
 }
 
+data class AstProgram(val expression: Expression) {
+    val span: SourceSpan
+        get() = expression.span
+}
+
 data class IdentifierExpression(val token: Token) : Expression {
     val name: String
         get() = token.lexeme
@@ -52,4 +57,3 @@ data class GroupedExpression(
 data class MissingExpression(
     override val span: SourceSpan,
 ) : Expression
-

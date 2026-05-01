@@ -1,9 +1,8 @@
-import kotlinx.kover.gradle.plugin.dsl.CoverageUnit
-
 plugins {
-    kotlin("jvm") version "2.3.20"
+    base
+    kotlin("jvm") version "2.3.20" apply false
     kotlin("multiplatform") version "2.3.20" apply false
-    id("org.jetbrains.kotlinx.kover") version "0.9.8"
+    id("org.jetbrains.kotlinx.kover") version "0.9.8" apply false
 }
 
 group = "cn.llonvne"
@@ -13,32 +12,16 @@ repositories {
     mavenCentral()
 }
 
-dependencies {
-    testImplementation(kotlin("test"))
+tasks.register("test") {
+    dependsOn(":compiler:core:jvmTest")
 }
 
-kotlin {
-    jvmToolchain(25)
-}
-
-tasks.test {
-    useJUnitPlatform()
-}
-
-kover {
-    reports {
-        verify {
-            rule("100 percent line coverage") {
-                minBound(100, CoverageUnit.LINE)
-            }
-            rule("100 percent branch coverage") {
-                minBound(100, CoverageUnit.BRANCH)
-            }
-        }
-    }
+tasks.register("koverVerify") {
+    dependsOn(":compiler:core:koverVerify")
 }
 
 tasks.check {
+    dependsOn(tasks.named("test"))
     dependsOn(tasks.named("koverVerify"))
     dependsOn(":runtime:kn:check")
 }

@@ -12,6 +12,10 @@ The first execution path only connects the existing seed expression grammar.
 The execution order is: source text, lexer, parser, Core IR lowering, Core IR
 evaluation, execution result.
 
+执行器必须通过 compiler pipeline 进入 lexer、parser 和 Core IR lowering。
+The execution engine must enter lexing, parsing, and Core IR lowering through
+the compiler pipeline.
+
 本规范不定义完整 VM、对象系统、函数调用、变量绑定或类型系统。
 This spec does not define a full VM, object system, function calls, bindings, or
 type system.
@@ -27,6 +31,10 @@ must return failure.
 
 编译错误不得进入 Core IR evaluation。
 Compilation errors must not enter Core IR evaluation.
+
+如果 compiler pipeline 返回 failure，执行器不得调用 evaluator。
+If the compiler pipeline returns failure, the execution engine must not call the
+evaluator.
 
 ## Core IR / Core IR
 
@@ -78,4 +86,3 @@ Missing expressions or undefined AST forms must produce `EXEC001`.
 | `EXEC001` | unsupported expression for current execution scope / 当前执行范围不支持的表达式 |
 | `EXEC002` | division by zero / 除以零 |
 | `EXEC003` | Int64 overflow / Int64 溢出 |
-

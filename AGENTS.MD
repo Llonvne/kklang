@@ -15,9 +15,10 @@ Follow these rules for every change.
   Language behavior must come from the maintained spec.
 - 面向人类的 Markdown 规范放在 `spec/` 下。
   Human-readable Markdown spec files live under `spec/`.
-- 可执行的 Kotlin DSL 规范放在 `src/test` 下；当项目需要时再拆出专门的 `spec-dsl` 模块。
-  Executable Kotlin DSL spec definitions live under `src/test`; move them into a
-  dedicated `spec-dsl` module once the project needs that split.
+- 可执行的 Kotlin DSL 规范放在对应模块的测试源码集下，例如 `compiler/core/src/commonTest`；当项目需要跨模块共享时再拆出专门的 `spec-dsl` 模块。
+  Executable Kotlin DSL spec definitions live under the owning module's test
+  source set, such as `compiler/core/src/commonTest`; move them into a dedicated
+  `spec-dsl` module once the project needs cross-module sharing.
 - 如果行为尚未被规范定义，先停在测试/规范提案阶段，并在实现前请求确认。
   If behavior has not been specified yet, stop at tests/spec proposals and ask
   for confirmation before implementing it.
@@ -51,6 +52,18 @@ Follow these rules for every change.
 - 如果文档中的中英文含义不一致，先修正文档，再继续实现。
   If the Chinese and English meanings diverge, fix the document before
   continuing implementation.
+
+## Code Comments / 代码注释
+
+- 所有类、接口、枚举、对象、方法、函数和测试都必须持有准确、不过时的中文/英文双语注释。
+  Every class, interface, enum, object, method, function, and test must carry
+  accurate, non-stale bilingual Chinese/English comments.
+- 注释必须描述当前真实行为、约束和意图；当代码行为变化时，同一变更必须同步更新相关注释。
+  Comments must describe the current real behavior, constraints, and intent;
+  when code behavior changes, the same change must update the related comments.
+- 如果发现注释缺失、过时或与实现不一致，先修备注释再继续依赖它做实现判断。
+  If comments are missing, stale, or inconsistent with implementation, fix the
+  comments before relying on them for implementation decisions.
 
 ## Kotlin Policy / Kotlin 策略
 
@@ -131,6 +144,15 @@ Follow these rules for every change.
 - 为当前规范保留最小可观察行为面；未来语法和类型系统应通过增量规范扩展。
   Preserve the smallest observable behavior surface needed for the current
   spec. Future syntax and type-system work should be added incrementally.
+
+## Handoff Brief / 交付简报
+
+- 完成代码修改后必须提供简报，说明改了什么、验证了什么、还剩什么风险或后续事项。
+  After completing code changes, provide a brief that states what changed, what
+  was verified, and what risks or follow-up items remain.
+- 简报必须简洁、具体，并与实际执行过的命令和结果一致。
+  The brief must be concise, concrete, and consistent with the commands and
+  results that were actually executed.
 
 ## Required Verification / 必需验证
 

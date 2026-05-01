@@ -39,7 +39,7 @@ class ExecutionSpecTest {
 
     @Test
     fun `markdown execution spec contains dsl ir and diagnostics`() {
-        val markdown = Path("spec/execution.md").readText()
+        val markdown = Path("../../spec/execution.md").readText()
         val expectedTerms = minimalExecutionSpec.irNodes + minimalExecutionSpec.diagnostics.map { it.code }
 
         for (term in expectedTerms) {
@@ -47,4 +47,3 @@ class ExecutionSpecTest {
         }
     }
 }
-

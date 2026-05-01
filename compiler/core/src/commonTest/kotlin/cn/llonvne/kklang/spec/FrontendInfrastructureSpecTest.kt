@@ -48,11 +48,10 @@ class FrontendInfrastructureSpecTest {
 
     @Test
     fun `markdown spec contains the same diagnostic codes as dsl spec`() {
-        val markdown = Path("spec/frontend-infrastructure.md").readText()
+        val markdown = Path("../../spec/frontend-infrastructure.md").readText()
 
         for (diagnostic in frontendInfrastructureSpec.diagnostics) {
             assertTrue(markdown.contains(diagnostic.code), "missing ${diagnostic.code} in Markdown spec")
         }
     }
 }
-
