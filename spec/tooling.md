@@ -19,9 +19,10 @@ tooling spec, tests, and implementation in the same change.
 
 ## Current Scope / 当前范围
 
-第一版工具链只要求 `.kk` 文件识别、语法高亮、LSP 诊断和 LSP semantic tokens。
+第一版工具链只要求 `.kk` 文件识别、语法高亮、LSP 诊断、LSP semantic tokens、IDEA 最小 PSI 和 IDEA 诊断标注。
 The first tooling version requires only `.kk` file recognition, syntax
-highlighting, LSP diagnostics, and LSP semantic tokens.
+highlighting, LSP diagnostics, LSP semantic tokens, IDEA minimal PSI, and IDEA
+diagnostic annotations.
 
 第一版工具链不定义补全、跳转、重命名、格式化或代码动作。
 The first tooling version does not define completion, navigation, rename,
@@ -88,16 +89,26 @@ to produce semantic token data.
 
 ## IDEA Plugin / IDEA 插件
 
-IDEA 插件必须提供 `.kk` 文件类型和 syntax highlighter。
-The IDEA plugin must provide the `.kk` file type and a syntax highlighter.
+IDEA 插件必须提供 `.kk` 文件类型、syntax highlighter、最小 PSI shell 和 diagnostic annotator。
+The IDEA plugin must provide the `.kk` file type, a syntax highlighter, a
+minimal PSI shell, and a diagnostic annotator.
 
-DSL feature 名称固定为 `kk-file-type`、`syntax-highlighter` 和 `installable-plugin-zip`。
-The fixed DSL feature names are `kk-file-type`, `syntax-highlighter`, and
-`installable-plugin-zip`.
+DSL feature 名称固定为 `kk-file-type`、`syntax-highlighter`、`minimal-psi`、`diagnostic-annotator` 和 `installable-plugin-zip`。
+The fixed DSL feature names are `kk-file-type`, `syntax-highlighter`,
+`minimal-psi`, `diagnostic-annotator`, and `installable-plugin-zip`.
 
 IDEA syntax highlighter 必须复用共享高亮分类，不得复制 lexer 规则。
 The IDEA syntax highlighter must reuse shared highlighting classification and
 must not copy lexer rules.
+
+IDEA 最小 PSI shell 只用于让 IDEA daemon 能对 `.kk` 文件运行 annotator，不定义语言语法或语义。
+The IDEA minimal PSI shell exists only so the IDEA daemon can run annotators for
+`.kk` files; it does not define language syntax or semantics.
+
+IDEA diagnostic annotator 必须复用 `compiler:core` 编译管线，并把 compiler diagnostic code、message 和 source span 映射为 IDEA error annotation。
+The IDEA diagnostic annotator must reuse the `compiler:core` compiler pipeline
+and map compiler diagnostic codes, messages, and source spans to IDEA error
+annotations.
 
 IDEA 插件构建必须生成可通过 “Install Plugin from Disk” 安装的 zip。
 The IDEA plugin build must produce a zip installable through “Install Plugin

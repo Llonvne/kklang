@@ -21,6 +21,8 @@ class KkPluginDescriptorTest {
         val text = descriptor.readText()
         assertTrue(text.contains("extensions=\"kk\""))
         assertTrue(text.contains("cn.llonvne.kklang.idea.KkFileType"))
+        assertTrue(text.contains("cn.llonvne.kklang.idea.KkParserDefinition"))
         assertTrue(text.contains("cn.llonvne.kklang.idea.KkSyntaxHighlighterFactory"))
+        assertTrue(text.contains("cn.llonvne.kklang.idea.KkDiagnosticExternalAnnotator"))
     }
 }

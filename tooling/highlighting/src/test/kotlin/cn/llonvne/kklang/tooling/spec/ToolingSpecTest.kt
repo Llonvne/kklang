@@ -45,6 +45,7 @@ class ToolingSpecTest {
         val markdown = Path("../../spec/tooling.md").readText()
 
         assertTrue(markdown.contains(".kk"), "missing .kk extension in Markdown spec")
+        assertTrue(markdown.contains("IDEA diagnostic annotator"), "missing IDEA diagnostic annotator in Markdown spec")
         for (feature in toolingLanguageSpec.lspFeatures + toolingLanguageSpec.ideaFeatures) {
             assertTrue(markdown.contains(feature), "missing $feature in Markdown spec")
         }

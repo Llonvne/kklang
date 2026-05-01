@@ -12,8 +12,14 @@
             implementationClass="cn.llonvne.kklang.idea.KkFileType"
             fieldName="INSTANCE"
             extensions="kk" />
+        <lang.parserDefinition
+            language="kklang"
+            implementationClass="cn.llonvne.kklang.idea.KkParserDefinition" />
         <lang.syntaxHighlighterFactory
             language="kklang"
             implementationClass="cn.llonvne.kklang.idea.KkSyntaxHighlighterFactory" />
+        <externalAnnotator
+            language="kklang"
+            implementationClass="cn.llonvne.kklang.idea.KkDiagnosticExternalAnnotator" />
     </extensions>
 </idea-plugin>

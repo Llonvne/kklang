@@ -126,5 +126,7 @@ val toolingLanguageSpec = toolingSpec {
 
     ideaFeature("kk-file-type")
     ideaFeature("syntax-highlighter")
+    ideaFeature("minimal-psi")
+    ideaFeature("diagnostic-annotator")
     ideaFeature("installable-plugin-zip")
 }
