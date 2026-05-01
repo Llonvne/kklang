@@ -145,6 +145,23 @@ Follow these rules for every change.
   Preserve the smallest observable behavior surface needed for the current
   spec. Future syntax and type-system work should be added incrementally.
 
+## Tooling Synchronization / 工具链同步
+
+- `.kk` 开发工具是语言产品的一部分，必须随着语言语法、token、诊断和规范一起迭代。
+  `.kk` developer tooling is part of the language product and must evolve with
+  language syntax, tokens, diagnostics, and specs.
+- 修改 lexer token、parser surface、diagnostic code 或语义分类时，同一变更必须同步更新共享高亮分类、LSP 行为、IDEA 插件行为、Markdown 规范、Kotlin DSL 规范和测试。
+  When changing lexer tokens, parser surface, diagnostic codes, or semantic
+  categories, the same change must update shared highlighting classification,
+  LSP behavior, IDEA plugin behavior, Markdown specs, Kotlin DSL specs, and
+  tests.
+- LSP 和 IDEA 插件不得各自发明语法规则；它们必须复用编译器前端或共享 tooling 模块。
+  The LSP and IDEA plugin must not invent syntax rules independently; they must
+  reuse the compiler frontend or shared tooling modules.
+- IDEA 插件交付必须生成可在本地 IntelliJ IDEA 安装的插件 zip，并在最终简报中说明产物路径。
+  IDEA plugin delivery must produce a plugin zip installable in the local
+  IntelliJ IDEA, and the final brief must state the artifact path.
+
 ## Handoff Brief / 交付简报
 
 - 完成代码修改后必须提供简报，说明改了什么、验证了什么、还剩什么风险或后续事项。

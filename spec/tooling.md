@@ -1,0 +1,104 @@
+# Tooling Spec / 工具链规范
+
+本规范定义 `kklang` 的第一版 `.kk` 开发工具行为。
+This spec defines the first `.kk` developer tooling behavior for `kklang`.
+
+## Guiding Principle / 指导原则
+
+`.kk` 工具链是语言产品的一部分，必须随语言规范一起演进。
+The `.kk` tooling is part of the language product and must evolve with the
+language spec.
+
+LSP、IDEA 插件和其他编辑器支持不得各自重新定义语法；它们必须复用编译器前端或共享 tooling 模块。
+The LSP, IDEA plugin, and other editor integrations must not redefine syntax on
+their own; they must reuse the compiler frontend or shared tooling modules.
+
+每次新增或修改 token、语法、诊断或语义分类时，同一变更必须更新工具链规范、测试和实现。
+Every token, syntax, diagnostic, or semantic-category change must update the
+tooling spec, tests, and implementation in the same change.
+
+## Current Scope / 当前范围
+
+第一版工具链只要求 `.kk` 文件识别、语法高亮、LSP 诊断和 LSP semantic tokens。
+The first tooling version requires only `.kk` file recognition, syntax
+highlighting, LSP diagnostics, and LSP semantic tokens.
+
+第一版工具链不定义补全、跳转、重命名、格式化或代码动作。
+The first tooling version does not define completion, navigation, rename,
+formatting, or code actions.
+
+## File Type / 文件类型
+
+`kklang` 源文件扩展名是 `.kk`。
+The `kklang` source file extension is `.kk`.
+
+IDEA 插件必须把 `.kk` 注册为 `kklang` 文件类型。
+The IDEA plugin must register `.kk` as the `kklang` file type.
+
+## Highlight Categories / 高亮分类
+
+共享高亮分类必须覆盖当前默认 lexer 的可见 token。
+Shared highlighting categories must cover the visible tokens emitted by the
+current default lexer.
+
+| Category / 分类 | Token kinds / Token 类型 |
+| --- | --- |
+| `keyword` | `val` |
+| `identifier` | `identifier` |
+| `integer` | `integer` |
+| `operator` | `plus`, `minus`, `star`, `slash`, `equals` |
+| `delimiter` | `left_paren`, `right_paren`, `semicolon` |
+| `whitespace` | `whitespace` |
+| `unknown` | `unknown` |
+| `eof` | `eof` |
+
+默认编辑器高亮不发出 `whitespace` 和 `eof`；工具测试可以请求包含 trivia。
+Default editor highlighting does not emit `whitespace` or `eof`; tooling tests
+may request trivia inclusion.
+
+未知字符必须保留为 `unknown` 分类，以便编辑器能显示错误位置。
+Unknown characters must remain classified as `unknown` so editors can show the
+error location.
+
+## LSP / Language Server Protocol
+
+LSP 服务器使用 stdio JSON-RPC 消息。
+The LSP server uses stdio JSON-RPC messages.
+
+第一版 LSP capabilities 必须声明 `textDocumentSync`、`textDocument/publishDiagnostics` 和 `textDocument/semanticTokens/full` 所需能力。
+The first LSP capabilities must declare the features needed for
+`textDocumentSync`, `textDocument/publishDiagnostics`, and
+`textDocument/semanticTokens/full`.
+
+DSL feature 名称固定为 `stdio-json-rpc`、`textDocumentSync`、`publishDiagnostics` 和 `semanticTokensFull`。
+The fixed DSL feature names are `stdio-json-rpc`, `textDocumentSync`,
+`publishDiagnostics`, and `semanticTokensFull`.
+
+`textDocument/didOpen` 和 `textDocument/didChange` 必须重新运行编译管线，并发布当前 diagnostics。
+`textDocument/didOpen` and `textDocument/didChange` must rerun the compiler
+pipeline and publish current diagnostics.
+
+诊断必须保留编译器 diagnostic code、message、source span 和 `kklang` source 名称。
+Diagnostics must preserve the compiler diagnostic code, message, source span,
+and `kklang` source name.
+
+`textDocument/semanticTokens/full` 必须使用共享高亮分类生成 semantic token 数据。
+`textDocument/semanticTokens/full` must use shared highlighting classification
+to produce semantic token data.
+
+## IDEA Plugin / IDEA 插件
+
+IDEA 插件必须提供 `.kk` 文件类型和 syntax highlighter。
+The IDEA plugin must provide the `.kk` file type and a syntax highlighter.
+
+DSL feature 名称固定为 `kk-file-type`、`syntax-highlighter` 和 `installable-plugin-zip`。
+The fixed DSL feature names are `kk-file-type`, `syntax-highlighter`, and
+`installable-plugin-zip`.
+
+IDEA syntax highlighter 必须复用共享高亮分类，不得复制 lexer 规则。
+The IDEA syntax highlighter must reuse shared highlighting classification and
+must not copy lexer rules.
+
+IDEA 插件构建必须生成可通过 “Install Plugin from Disk” 安装的 zip。
+The IDEA plugin build must produce a zip installable through “Install Plugin
+from Disk”.

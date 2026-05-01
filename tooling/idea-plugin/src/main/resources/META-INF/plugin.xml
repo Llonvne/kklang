@@ -1,0 +1,19 @@
+<idea-plugin>
+    <id>cn.llonvne.kklang.idea</id>
+    <name>kklang</name>
+    <vendor>llonvne</vendor>
+    <description>kklang .kk language support.</description>
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <fileType
+            name="kklang"
+            language="kklang"
+            implementationClass="cn.llonvne.kklang.idea.KkFileType"
+            fieldName="INSTANCE"
+            extensions="kk" />
+        <lang.syntaxHighlighterFactory
+            language="kklang"
+            implementationClass="cn.llonvne.kklang.idea.KkSyntaxHighlighterFactory" />
+    </extensions>
+</idea-plugin>
