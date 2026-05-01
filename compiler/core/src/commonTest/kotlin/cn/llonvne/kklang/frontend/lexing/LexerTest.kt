@@ -8,7 +8,15 @@ import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
+/**
+ * 覆盖默认 lexer、扩展规则和错误诊断。
+ * Covers the default lexer, extension rules, and error diagnostics.
+ */
 class LexerTest {
+    /**
+     * 验证默认 lexer 识别 seed token 并默认省略 trivia。
+     * Verifies that the default lexer recognizes seed tokens and omits trivia by default.
+     */
     @Test
     fun `default lexer tokenizes seed surface and omits trivia`() {
         val source = SourceText.of("sample.kk", "alpha + 42\n(beta) _A0")
@@ -34,6 +42,10 @@ class LexerTest {
         assertEquals("identifier", TokenKinds.Identifier.toString())
     }
 
+    /**
+     * 验证工具模式可以发出 whitespace trivia。
+     * Verifies that tooling mode can emit whitespace trivia.
+     */
     @Test
     fun `lexer can emit trivia for tools`() {
         val source = SourceText.of("sample.kk", "a \n b")
@@ -52,6 +64,10 @@ class LexerTest {
         assertEquals(" \n ", result.tokens[1].lexeme)
     }
 
+    /**
+     * 验证 identifier 起始/后续字符的 ASCII 分支覆盖。
+     * Verifies ASCII branch coverage for identifier start and continuation characters.
+     */
     @Test
     fun `identifier lexer covers ascii start and continuation branches`() {
         val source = SourceText.of("sample.kk", "_ A Z a z A0 z9 a_ aA aZ aa az a0 a9 a@ [ ` {")
@@ -89,6 +105,10 @@ class LexerTest {
         )
     }
 
+    /**
+     * 验证未知字符同时产生 unknown token 和 LEX001。
+     * Verifies that unknown characters produce both unknown tokens and LEX001.
+     */
     @Test
     fun `unknown characters are tokens and diagnostics`() {
         val source = SourceText.of("sample.kk", "a @")
@@ -100,6 +120,10 @@ class LexerTest {
         assertEquals("LEX001", result.diagnostics.single().code)
     }
 
+    /**
+     * 验证自定义 lexer rule 可扩展且最长匹配胜出。
+     * Verifies that custom lexer rules are extensible and longest match wins.
+     */
     @Test
     fun `custom lexer rules are extensible and longest match wins`() {
         val arrow = TokenKind("arrow")
@@ -114,6 +138,10 @@ class LexerTest {
         assertEquals(listOf(TokenKinds.Identifier, arrow, TokenKinds.Identifier, TokenKinds.EndOfFile), result.tokens.map { it.kind })
     }
 
+    /**
+     * 验证长度相同时最早注册的 lexer rule 胜出。
+     * Verifies that the earliest registered lexer rule wins ties.
+     */
     @Test
     fun `earliest registered lexer rule wins ties`() {
         val first = TokenKind("first")
@@ -128,6 +156,10 @@ class LexerTest {
         assertEquals(listOf(first, TokenKinds.EndOfFile), result.tokens.map { it.kind })
     }
 
+    /**
+     * 验证 lexer 扩展点拒绝非法配置和非法 offset。
+     * Verifies that lexer extension points reject invalid configuration and invalid offsets.
+     */
     @Test
     fun `lexer validates extension points`() {
         assertFailsWith<IllegalArgumentException> { TokenKind("") }

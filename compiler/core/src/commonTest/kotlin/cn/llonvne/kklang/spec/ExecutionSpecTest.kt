@@ -6,7 +6,15 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
+/**
+ * 覆盖 execution Kotlin DSL 规范和 Markdown 规范的一致性。
+ * Covers consistency between the execution Kotlin DSL spec and Markdown spec.
+ */
 class ExecutionSpecTest {
+    /**
+     * 验证 execution DSL 记录当前 pipeline 阶段。
+     * Verifies that the execution DSL records the current pipeline phases.
+     */
     @Test
     fun `execution dsl spec records pipeline phases`() {
         assertEquals(
@@ -15,11 +23,19 @@ class ExecutionSpecTest {
         )
     }
 
+    /**
+     * 验证 execution DSL 记录第一批 Core IR 节点。
+     * Verifies that the execution DSL records the first Core IR nodes.
+     */
     @Test
     fun `execution dsl spec records first core ir surface`() {
         assertEquals(listOf("IrInt64", "IrUnary", "IrBinary"), minimalExecutionSpec.irNodes)
     }
 
+    /**
+     * 验证 execution DSL 记录当前可执行源码形式。
+     * Verifies that the execution DSL records currently executable source forms.
+     */
     @Test
     fun `execution dsl spec records current executable forms`() {
         assertEquals(
@@ -37,6 +53,10 @@ class ExecutionSpecTest {
         )
     }
 
+    /**
+     * 验证 Markdown execution 规范包含 DSL 中的 IR 和 diagnostic 项。
+     * Verifies that the Markdown execution spec contains IR and diagnostic items from the DSL.
+     */
     @Test
     fun `markdown execution spec contains dsl ir and diagnostics`() {
         val markdown = Path("../../spec/execution.md").readText()

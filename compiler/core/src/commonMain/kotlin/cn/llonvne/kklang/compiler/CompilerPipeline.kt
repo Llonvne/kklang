@@ -11,8 +11,16 @@ import cn.llonvne.kklang.frontend.lexing.Token
 import cn.llonvne.kklang.frontend.parsing.AstProgram
 import cn.llonvne.kklang.frontend.parsing.Parser
 
+/**
+ * 编译请求的最小输入，目前只包含一份源码文本。
+ * Minimal compiler request input; it currently contains a single source text.
+ */
 data class CompilationInput(val source: SourceText)
 
+/**
+ * 成功编译后的最小 program，目前只包装一个 Core IR expression。
+ * Minimal successfully compiled program; it currently wraps one Core IR expression.
+ */
 data class CompiledProgram(
     val expression: IrExpression,
 ) {
@@ -20,17 +28,29 @@ data class CompiledProgram(
         get() = expression.span
 }
 
+/**
+ * 编译管线实际运行过的阶段标记。
+ * Phase marker for the stages actually run by the compiler pipeline.
+ */
 enum class CompilerPhase {
     Lexing,
     Parsing,
     Lowering,
 }
 
+/**
+ * 编译管线的封闭结果模型，成功时携带 program，失败时携带 diagnostics。
+ * Closed compiler-pipeline result model carrying a program on success and diagnostics on failure.
+ */
 sealed interface CompilationResult {
     val diagnostics: List<Diagnostic>
     val phaseTrace: List<CompilerPhase>
     val hasErrors: Boolean
 
+    /**
+     * 编译成功结果，diagnostics 固定为空。
+     * Successful compilation result with an always-empty diagnostics list.
+     */
     data class Success(
         val program: CompiledProgram,
         override val phaseTrace: List<CompilerPhase>,
@@ -39,6 +59,10 @@ sealed interface CompilationResult {
         override val hasErrors: Boolean = false
     }
 
+    /**
+     * 编译失败结果，保留失败前已经运行的阶段轨迹。
+     * Failed compilation result preserving the phase trace reached before failure.
+     */
     data class Failure(
         override val diagnostics: List<Diagnostic>,
         override val phaseTrace: List<CompilerPhase>,
@@ -48,11 +72,19 @@ sealed interface CompilationResult {
     }
 }
 
+/**
+ * 最小编译管线，按 lexing、parsing、lowering 顺序运行并在诊断出现时短路。
+ * Minimal compiler pipeline that runs lexing, parsing, and lowering in order and short-circuits on diagnostics.
+ */
 class CompilerPipeline(
     private val lexer: Lexer = Lexer(),
     private val parserFactory: (List<Token>) -> Parser = { Parser(it) },
     private val lowerer: IrLowerer = CoreIrLowerer(),
 ) {
+    /**
+     * 编译输入源码并返回完整成功结果或第一个失败阶段的 diagnostics。
+     * Compiles the input source and returns either a complete success or diagnostics from the first failed phase.
+     */
     fun compile(input: CompilationInput): CompilationResult {
         val phaseTrace = mutableListOf<CompilerPhase>()
 
@@ -92,6 +124,10 @@ class CompilerPipeline(
         )
     }
 
+    /**
+     * 构造失败结果并冻结当前阶段轨迹，避免调用方观察到后续突变。
+     * Builds a failure result and freezes the current phase trace so callers cannot observe later mutation.
+     */
     private fun failure(
         diagnostics: List<Diagnostic>,
         phaseTrace: List<CompilerPhase>,

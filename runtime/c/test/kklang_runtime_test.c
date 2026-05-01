@@ -9,6 +9,10 @@
 static int fail_next_calloc = 0;
 static int fail_next_malloc = 0;
 
+/*
+ * 测试用 calloc wrapper，在标志位打开时模拟一次 OOM。
+ * Test calloc wrapper that simulates one OOM when the flag is set.
+ */
 void *kk_test_calloc(size_t count, size_t size) {
     if (fail_next_calloc != 0) {
         fail_next_calloc = 0;
@@ -17,6 +21,10 @@ void *kk_test_calloc(size_t count, size_t size) {
     return calloc(count, size);
 }
 
+/*
+ * 测试用 malloc wrapper，在标志位打开时模拟一次 OOM。
+ * Test malloc wrapper that simulates one OOM when the flag is set.
+ */
 void *kk_test_malloc(size_t size) {
     if (fail_next_malloc != 0) {
         fail_next_malloc = 0;
@@ -25,14 +33,26 @@ void *kk_test_malloc(size_t size) {
     return malloc(size);
 }
 
+/*
+ * 让下一次 calloc 调用失败。
+ * Makes the next calloc call fail.
+ */
 static void fail_calloc_once(void) {
     fail_next_calloc = 1;
 }
 
+/*
+ * 让下一次 malloc 调用失败。
+ * Makes the next malloc call fail.
+ */
 static void fail_malloc_once(void) {
     fail_next_malloc = 1;
 }
 
+/*
+ * 测试 runtime 创建、非法参数和销毁生命周期。
+ * Tests runtime creation, invalid arguments, and destroy lifetime.
+ */
 static void test_runtime_lifetime(void) {
     kk_runtime *runtime = NULL;
 
@@ -43,6 +63,10 @@ static void test_runtime_lifetime(void) {
     assert(kk_runtime_destroy(runtime) == KK_OK);
 }
 
+/*
+ * 测试 runtime 和 string 分配失败路径。
+ * Tests runtime and string allocation failure paths.
+ */
 static void test_out_of_memory(void) {
     kk_runtime *runtime = NULL;
     kk_string *text = NULL;
@@ -62,6 +86,10 @@ static void test_out_of_memory(void) {
     assert(kk_runtime_destroy(runtime) == KK_OK);
 }
 
+/*
+ * 测试字符串创建、读取、释放和跨 runtime 拒绝规则。
+ * Tests string creation, reading, release, and cross-runtime rejection rules.
+ */
 static void test_string_lifetime(void) {
     kk_runtime *runtime = NULL;
     kk_runtime *other_runtime = NULL;
@@ -101,6 +129,10 @@ static void test_string_lifetime(void) {
     assert(kk_runtime_destroy(runtime) == KK_OK);
 }
 
+/*
+ * 测试从 runtime 字符串链表中间释放节点时前后链接正确更新。
+ * Tests that releasing a middle node from the runtime string list updates neighboring links correctly.
+ */
 static void test_string_release_from_middle_of_runtime_list(void) {
     kk_runtime *runtime = NULL;
     kk_string *first = NULL;
@@ -118,6 +150,10 @@ static void test_string_release_from_middle_of_runtime_list(void) {
     assert(kk_runtime_destroy(runtime) == KK_OK);
 }
 
+/*
+ * 测试所有当前 runtime value tag 构造函数。
+ * Tests every current runtime value tag constructor.
+ */
 static void test_value_tags(void) {
     kk_value unit = kk_value_unit();
     kk_value boolean = kk_value_bool(true);
@@ -136,6 +172,10 @@ static void test_value_tags(void) {
     assert(object_ref.as.object_ref == (void *)0x2);
 }
 
+/*
+ * 运行 C runtime 的最小测试套件。
+ * Runs the minimal C runtime test suite.
+ */
 int main(void) {
     test_runtime_lifetime();
     test_out_of_memory();

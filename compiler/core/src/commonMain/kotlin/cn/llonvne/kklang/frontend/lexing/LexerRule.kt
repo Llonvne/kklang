@@ -2,6 +2,10 @@ package cn.llonvne.kklang.frontend.lexing
 
 import cn.llonvne.kklang.frontend.SourceText
 
+/**
+ * 一条可扩展 lexer rule，返回从指定 offset 开始的匹配长度。
+ * Extensible lexer rule that returns a match length starting at a given offset.
+ */
 class LexerRule private constructor(
     val name: String,
     private val kind: TokenKind,
@@ -11,13 +15,25 @@ class LexerRule private constructor(
         require(name.isNotBlank()) { "lexer rule name must not be blank" }
     }
 
+    /**
+     * 在指定 offset 尝试匹配源码，未匹配时返回 null。
+     * Attempts to match source at the given offset and returns null when it does not match.
+     */
     fun match(source: SourceText, offset: Int): TokenMatch? {
         require(offset in 0 until source.length) { "offset must point at an existing character" }
         val length = matcher(source, offset)
         return if (length > 0) TokenMatch(kind = kind, length = length) else null
     }
 
+    /**
+     * LexerRule 的内建工厂集合。
+     * Built-in factory set for LexerRule.
+     */
     companion object {
+        /**
+         * 创建一个匹配固定字面量的 lexer rule。
+         * Creates a lexer rule that matches one fixed literal.
+         */
         fun literal(name: String, kind: TokenKind, literal: String): LexerRule {
             require(literal.isNotEmpty()) { "literal rule must not be empty" }
             return LexerRule(name = name, kind = kind) { source, offset ->
@@ -25,6 +41,10 @@ class LexerRule private constructor(
             }
         }
 
+        /**
+         * 创建一个先匹配起始字符再连续消费后续字符的 lexer rule。
+         * Creates a lexer rule that matches a start character and then consumes continuation characters.
+         */
         fun run(
             name: String,
             kind: TokenKind,
@@ -44,4 +64,3 @@ class LexerRule private constructor(
             }
     }
 }
-

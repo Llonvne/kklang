@@ -18,7 +18,15 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
+/**
+ * 覆盖 CoreIrLowerer 支持的表达式、unsupported 分支和辅助渲染。
+ * Covers CoreIrLowerer supported expressions, unsupported branches, and helper rendering.
+ */
 class CoreIrLowererTest {
+    /**
+     * 验证 seed 表达式语法中的支持形式都能降级为 Core IR。
+     * Verifies that all supported seed expression forms lower to Core IR.
+     */
     @Test
     fun `lowerer lowers all supported seed expression forms`() {
         val result = lower("-(1 + 2) * +3")
@@ -30,6 +38,10 @@ class CoreIrLowererTest {
         )
     }
 
+    /**
+     * 验证标识符在当前执行范围内被报告为 unsupported。
+     * Verifies that identifiers are reported as unsupported in the current execution scope.
+     */
     @Test
     fun `lowerer reports unsupported identifiers`() {
         val result = lower("name")
@@ -39,6 +51,10 @@ class CoreIrLowererTest {
         assertEquals(null, result.ir)
     }
 
+    /**
+     * 验证超出 Int64 范围的整数字面量产生 EXEC003。
+     * Verifies that integer literals outside Int64 range produce EXEC003.
+     */
     @Test
     fun `lowerer reports invalid integer literals`() {
         val expression = IntegerExpression(
@@ -51,6 +67,10 @@ class CoreIrLowererTest {
         assertEquals("EXEC003", result.diagnostics.single().code)
     }
 
+    /**
+     * 验证 MissingExpression 会被 lowering 报告为 unsupported。
+     * Verifies that MissingExpression is reported as unsupported during lowering.
+     */
     @Test
     fun `lowerer reports missing expressions`() {
         val span = SourceSpan("sample.kk", 0, 0)
@@ -60,6 +80,10 @@ class CoreIrLowererTest {
         assertEquals("EXEC001", result.diagnostics.single().code)
     }
 
+    /**
+     * 验证未知 prefix 和 binary operator 都产生 EXEC001。
+     * Verifies that unknown prefix and binary operators both produce EXEC001.
+     */
     @Test
     fun `lowerer reports unsupported prefix and binary operators`() {
         val left = parse("1")
@@ -72,6 +96,10 @@ class CoreIrLowererTest {
         assertEquals("EXEC001", CoreIrLowerer().lower(binary).diagnostics.single().code)
     }
 
+    /**
+     * 验证二元表达式左右两侧的 lowering 失败都会传播。
+     * Verifies that lowering failures from either side of a binary expression are propagated.
+     */
     @Test
     fun `lowerer reports left and right binary lowering failures`() {
         val one = parse("1")
@@ -85,6 +113,10 @@ class CoreIrLowererTest {
         assertEquals("EXEC001", rightFailure.diagnostics.single().code)
     }
 
+    /**
+     * 验证分组表达式内部的 lowering 失败会向外传播。
+     * Verifies that a lowering failure inside a grouped expression propagates outward.
+     */
     @Test
     fun `lowerer reports nested lowering failures`() {
         val grouped = GroupedExpression(
@@ -99,6 +131,10 @@ class CoreIrLowererTest {
         assertEquals("EXEC001", result.diagnostics.single().code)
     }
 
+    /**
+     * 验证成功 lowering 会暴露具体 Core IR 类型。
+     * Verifies that successful lowering exposes the concrete Core IR type.
+     */
     @Test
     fun `lowerer result success exposes typed ir`() {
         val result = lower("1")
@@ -107,15 +143,27 @@ class CoreIrLowererTest {
         assertFalse(result.hasErrors)
     }
 
+    /**
+     * 解析并 lowering 一段测试源码。
+     * Parses and lowers one test source snippet.
+     */
     private fun lower(text: String): IrLoweringResult =
         CoreIrLowerer().lower(parse(text))
 
+    /**
+     * 使用默认 lexer/parser 解析一段测试源码。
+     * Parses one test source snippet with the default lexer and parser.
+     */
     private fun parse(text: String) =
         Parser(Lexer().tokenize(SourceText.of("sample.kk", text)).tokens)
             .parseExpressionDocument()
             .expression
 }
 
+/**
+ * 将 Core IR 渲染为稳定的测试断言字符串。
+ * Renders Core IR into a stable assertion string for tests.
+ */
 private fun IrExpression.render(): String =
     when (this) {
         is IrInt64 -> "int64($value)"

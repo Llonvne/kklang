@@ -5,7 +5,15 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
+/**
+ * 覆盖 Diagnostic 的基础校验规则。
+ * Covers basic validation rules for Diagnostic.
+ */
 class DiagnosticTest {
+    /**
+     * 验证 diagnostic code 和 message 不能为空。
+     * Verifies that diagnostic code and message cannot be blank.
+     */
     @Test
     fun `diagnostics validate code and message`() {
         val span = SourceSpan("sample.kk", 0, 1)
@@ -16,4 +24,3 @@ class DiagnosticTest {
         assertFailsWith<IllegalArgumentException> { Diagnostic(code = "T001", message = "", span = span) }
     }
 }
-

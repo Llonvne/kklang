@@ -1,5 +1,9 @@
 package cn.llonvne.kklang.spec
 
+/**
+ * execution 层的可执行 DSL 规范快照。
+ * Executable DSL spec snapshot for the execution layer.
+ */
 data class ExecutionSpec(
     val name: String,
     val phases: List<String>,
@@ -8,9 +12,17 @@ data class ExecutionSpec(
     val diagnostics: List<DiagnosticSpec>,
 )
 
+/**
+ * 创建 execution DSL 规范。
+ * Creates an execution DSL spec.
+ */
 fun executionSpec(name: String, block: ExecutionSpecBuilder.() -> Unit): ExecutionSpec =
     ExecutionSpecBuilder(name).apply(block).build()
 
+/**
+ * execution 规范 builder，记录阶段、IR 节点、可执行形式和 diagnostics。
+ * Execution spec builder recording phases, IR nodes, executable forms, and diagnostics.
+ */
 @LanguageSpecDsl
 class ExecutionSpecBuilder(private val name: String) {
     private val phases = mutableListOf<String>()
@@ -18,22 +30,42 @@ class ExecutionSpecBuilder(private val name: String) {
     private val supportedForms = mutableListOf<String>()
     private val diagnostics = mutableListOf<DiagnosticSpec>()
 
+    /**
+     * 记录 execution pipeline 阶段。
+     * Records one execution pipeline phase.
+     */
     fun phase(name: String) {
         phases += name
     }
 
+    /**
+     * 记录一个 Core IR 节点名。
+     * Records one Core IR node name.
+     */
     fun irNode(name: String) {
         irNodes += name
     }
 
+    /**
+     * 记录当前支持执行的源码形式。
+     * Records one currently executable source form.
+     */
     fun supportedForm(name: String) {
         supportedForms += name
     }
 
+    /**
+     * 记录一个 execution diagnostic。
+     * Records one execution diagnostic.
+     */
     fun diagnostic(code: String, message: String) {
         diagnostics += DiagnosticSpec(code, message)
     }
 
+    /**
+     * 构造不可变 execution 规范。
+     * Builds the immutable execution spec.
+     */
     fun build(): ExecutionSpec =
         ExecutionSpec(
             name = name,
@@ -67,4 +99,3 @@ val minimalExecutionSpec = executionSpec("minimal-execution") {
     diagnostic("EXEC002", "division by zero")
     diagnostic("EXEC003", "Int64 overflow")
 }
-

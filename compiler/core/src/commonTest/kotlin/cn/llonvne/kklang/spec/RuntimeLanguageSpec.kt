@@ -1,5 +1,9 @@
 package cn.llonvne.kklang.spec
 
+/**
+ * runtime 层的可执行 DSL 规范快照。
+ * Executable DSL spec snapshot for the runtime layer.
+ */
 data class RuntimeSpec(
     val name: String,
     val guidingPrinciples: List<String>,
@@ -9,21 +13,45 @@ data class RuntimeSpec(
     val wrapperTypes: List<RuntimeWrapperSpec>,
 )
 
+/**
+ * C runtime status 的规范项。
+ * Spec item for a C runtime status.
+ */
 data class RuntimeStatusSpec(val name: String, val meaning: String)
 
+/**
+ * C runtime ABI 函数的规范项。
+ * Spec item for a C runtime ABI function.
+ */
 data class RuntimeFunctionSpec(
     val name: String,
     val ownership: String,
     val invalidArguments: String,
 )
 
+/**
+ * C runtime value tag 的规范项。
+ * Spec item for a C runtime value tag.
+ */
 data class RuntimeValueTagSpec(val name: String, val meaning: String)
 
+/**
+ * Kotlin/Native runtime wrapper 类型的规范项。
+ * Spec item for a Kotlin/Native runtime wrapper type.
+ */
 data class RuntimeWrapperSpec(val name: String, val rule: String)
 
+/**
+ * 创建 runtime DSL 规范。
+ * Creates a runtime DSL spec.
+ */
 fun runtimeSpec(name: String, block: RuntimeSpecBuilder.() -> Unit): RuntimeSpec =
     RuntimeSpecBuilder(name).apply(block).build()
 
+/**
+ * runtime 规范 builder，记录 ABI、status、value tag 和 wrapper 规则。
+ * Runtime spec builder recording ABI, status, value tag, and wrapper rules.
+ */
 @LanguageSpecDsl
 class RuntimeSpecBuilder(private val name: String) {
     private val guidingPrinciples = mutableListOf<String>()
@@ -32,26 +60,50 @@ class RuntimeSpecBuilder(private val name: String) {
     private val valueTags = mutableListOf<RuntimeValueTagSpec>()
     private val wrapperTypes = mutableListOf<RuntimeWrapperSpec>()
 
+    /**
+     * 记录一条 runtime 指导原则。
+     * Records one runtime guiding principle.
+     */
     fun guidingPrinciple(text: String) {
         guidingPrinciples += text
     }
 
+    /**
+     * 记录一个 C runtime status。
+     * Records one C runtime status.
+     */
     fun status(name: String, meaning: String) {
         statuses += RuntimeStatusSpec(name, meaning)
     }
 
+    /**
+     * 记录一个 C ABI 函数及其所有权/非法参数规则。
+     * Records one C ABI function with its ownership and invalid-argument rules.
+     */
     fun abiFunction(name: String, ownership: String, invalidArguments: String) {
         abiFunctions += RuntimeFunctionSpec(name, ownership, invalidArguments)
     }
 
+    /**
+     * 记录一个 runtime value tag。
+     * Records one runtime value tag.
+     */
     fun valueTag(name: String, meaning: String) {
         valueTags += RuntimeValueTagSpec(name, meaning)
     }
 
+    /**
+     * 记录一个 Kotlin/Native wrapper 类型规则。
+     * Records one Kotlin/Native wrapper type rule.
+     */
     fun wrapper(name: String, rule: String) {
         wrapperTypes += RuntimeWrapperSpec(name, rule)
     }
 
+    /**
+     * 构造不可变 runtime 规范。
+     * Builds the immutable runtime spec.
+     */
     fun build(): RuntimeSpec =
         RuntimeSpec(
             name = name,

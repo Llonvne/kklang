@@ -4,7 +4,15 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
+/**
+ * 覆盖 SourceText、SourcePosition 和 SourceSpan 的位置/范围规则。
+ * Covers SourceText, SourcePosition, and SourceSpan position and range rules.
+ */
 class SourceTextTest {
+    /**
+     * 验证 line/column 从一开始而 offset 从零开始。
+     * Verifies that line and column are one-based while offset is zero-based.
+     */
     @Test
     fun `source positions are one based while offsets are zero based`() {
         val source = SourceText.of("sample.kk", "ab\nc")
@@ -15,6 +23,10 @@ class SourceTextTest {
         assertEquals(SourcePosition(line = 2, column = 2, offset = 4), source.positionAt(4))
     }
 
+    /**
+     * 验证源码名字、位置和切片范围的非法输入会被拒绝。
+     * Verifies that invalid source names, positions, and slice ranges are rejected.
+     */
     @Test
     fun `source validates names and offsets`() {
         assertFailsWith<IllegalArgumentException> { SourceText.of("", "x") }
@@ -30,6 +42,10 @@ class SourceTextTest {
         assertFailsWith<IllegalArgumentException> { source.slice(0, 2) }
     }
 
+    /**
+     * 验证 span 文本和位置只能用于同名源码。
+     * Verifies that span text and positions can only be used with the source of the same name.
+     */
     @Test
     fun `span slices and positions are tied to the same source`() {
         val source = SourceText.of("sample.kk", "alpha")
@@ -51,6 +67,10 @@ class SourceTextTest {
         }
     }
 
+    /**
+     * 验证 span covering 只接受同源 span。
+     * Verifies that span covering only accepts spans from the same source.
+     */
     @Test
     fun `covering spans require the same source`() {
         val left = SourceSpan(sourceName = "sample.kk", startOffset = 1, endOffset = 3)

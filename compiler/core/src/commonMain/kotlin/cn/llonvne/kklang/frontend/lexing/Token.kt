@@ -2,15 +2,27 @@ package cn.llonvne.kklang.frontend.lexing
 
 import cn.llonvne.kklang.frontend.SourceSpan
 
+/**
+ * lexer 和 parser 共享的 token 类型标识。
+ * Token kind identifier shared by the lexer and parser.
+ */
 @JvmInline
 value class TokenKind(val id: String) {
     init {
         require(id.isNotBlank()) { "token kind id must not be blank" }
     }
 
+    /**
+     * 返回 token kind 的稳定 id。
+     * Returns the stable id of this token kind.
+     */
     override fun toString(): String = id
 }
 
+/**
+ * 当前默认词法器使用的内建 token kind 集合。
+ * Built-in token kind set used by the current default lexer.
+ */
 object TokenKinds {
     val Identifier: TokenKind = TokenKind("identifier")
     val Integer: TokenKind = TokenKind("integer")
@@ -25,12 +37,20 @@ object TokenKinds {
     val EndOfFile: TokenKind = TokenKind("eof")
 }
 
+/**
+ * 一个已词法化 token，包含类型、原始词素和源码 span。
+ * A lexed token containing kind, original lexeme, and source span.
+ */
 data class Token(
     val kind: TokenKind,
     val lexeme: String,
     val span: SourceSpan,
 )
 
+/**
+ * 单条 lexer rule 在某个 offset 的匹配结果。
+ * Match result produced by one lexer rule at a given offset.
+ */
 data class TokenMatch(
     val kind: TokenKind,
     val length: Int,
@@ -39,4 +59,3 @@ data class TokenMatch(
         require(length > 0) { "token match length must be greater than zero" }
     }
 }
-

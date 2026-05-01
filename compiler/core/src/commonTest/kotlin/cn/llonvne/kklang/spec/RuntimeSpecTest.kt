@@ -6,7 +6,15 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
+/**
+ * 覆盖 runtime Kotlin DSL 规范和 Markdown 规范的一致性。
+ * Covers consistency between the runtime Kotlin DSL spec and Markdown spec.
+ */
 class RuntimeSpecTest {
+    /**
+     * 验证 runtime DSL 记录 C status 表面。
+     * Verifies that the runtime DSL records the C status surface.
+     */
     @Test
     fun `runtime dsl spec records status surface`() {
         assertEquals(
@@ -15,6 +23,10 @@ class RuntimeSpecTest {
         )
     }
 
+    /**
+     * 验证 runtime DSL 记录最小 C ABI 函数表面。
+     * Verifies that the runtime DSL records the minimal C ABI function surface.
+     */
     @Test
     fun `runtime dsl spec records minimal c abi surface`() {
         assertEquals(
@@ -30,6 +42,10 @@ class RuntimeSpecTest {
         )
     }
 
+    /**
+     * 验证 runtime DSL 记录第一批 value tag。
+     * Verifies that the runtime DSL records the first value tags.
+     */
     @Test
     fun `runtime dsl spec records first value tags`() {
         assertEquals(
@@ -44,6 +60,10 @@ class RuntimeSpecTest {
         )
     }
 
+    /**
+     * 验证 Markdown runtime 规范包含 DSL 中的 status、函数、value tag 和 wrapper。
+     * Verifies that the Markdown runtime spec contains statuses, functions, value tags, and wrappers from the DSL.
+     */
     @Test
     fun `markdown runtime spec contains dsl status functions and value tags`() {
         val markdown = Path("../../spec/runtime.md").readText()

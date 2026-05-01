@@ -6,9 +6,17 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+/**
+ * 覆盖 CoreIrEvaluator 的嵌套失败传播路径。
+ * Covers nested failure propagation paths in CoreIrEvaluator.
+ */
 class CoreIrEvaluatorTest {
     private val span = SourceSpan("sample.kk", 0, 1)
 
+    /**
+     * 验证一元表达式 operand 求值失败时外层表达式返回失败。
+     * Verifies that an outer unary expression fails when its operand evaluation fails.
+     */
     @Test
     fun `evaluator returns null when unary operand evaluation fails`() {
         val overflow = IrUnary(
@@ -25,6 +33,10 @@ class CoreIrEvaluatorTest {
         assertEquals("EXEC003", result.diagnostics.single().code)
     }
 
+    /**
+     * 验证二元表达式左右 operand 的失败都会传播。
+     * Verifies that failures from either side of a binary expression are propagated.
+     */
     @Test
     fun `evaluator returns null when left or right binary evaluation fails`() {
         val overflow = IrBinary(
@@ -55,4 +67,3 @@ class CoreIrEvaluatorTest {
         assertEquals("EXEC002", rightFailure.diagnostics.single().code)
     }
 }
-

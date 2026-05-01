@@ -6,7 +6,15 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
+/**
+ * 覆盖 compiler pipeline Kotlin DSL 规范和 Markdown 规范的一致性。
+ * Covers consistency between the compiler pipeline Kotlin DSL spec and Markdown spec.
+ */
 class CompilerPipelineSpecTest {
+    /**
+     * 验证 compiler pipeline DSL 记录阶段顺序和结果类型。
+     * Verifies that the compiler pipeline DSL records phase order and result types.
+     */
     @Test
     fun `compiler pipeline spec records phase order and result surface`() {
         assertEquals(
@@ -19,6 +27,10 @@ class CompilerPipelineSpecTest {
         )
     }
 
+    /**
+     * 验证 compiler pipeline DSL 记录阶段短路规则。
+     * Verifies that the compiler pipeline DSL records phase stop rules.
+     */
     @Test
     fun `compiler pipeline spec records stop rules`() {
         assertEquals(
@@ -31,6 +43,10 @@ class CompilerPipelineSpecTest {
         )
     }
 
+    /**
+     * 验证 compiler pipeline DSL 记录内部 diagnostic。
+     * Verifies that the compiler pipeline DSL records internal diagnostics.
+     */
     @Test
     fun `compiler pipeline spec records internal diagnostics`() {
         assertEquals(
@@ -39,6 +55,10 @@ class CompilerPipelineSpecTest {
         )
     }
 
+    /**
+     * 验证 Markdown compiler pipeline 规范包含 DSL 暴露面。
+     * Verifies that the Markdown compiler pipeline spec contains the DSL surface.
+     */
     @Test
     fun `markdown compiler pipeline spec contains dsl surface`() {
         val markdown = Path("../../spec/compiler-pipeline.md").readText()
