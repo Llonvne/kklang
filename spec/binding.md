@@ -33,6 +33,7 @@ The first bound AST nodes are:
 | --- | --- |
 | `BoundProgram` | bound program / 已绑定程序 |
 | `BoundValDeclaration` | bound immutable val declaration / 已绑定不可变 val 声明 |
+| `BindingScope` | ordered current-scope symbol table / 有序的当前作用域符号表 |
 | `BindingSymbol` | immutable val symbol / 不可变 val 符号 |
 | `BoundInteger` | bound integer literal / 已绑定整数字面量 |
 | `BoundVariable` | bound variable reference carrying `BindingSymbol` / 携带 `BindingSymbol` 的已绑定变量引用 |
@@ -82,6 +83,18 @@ y * 3
 
 当前只定义一个 program scope。
 Only one program scope is currently defined.
+
+当前 program scope 必须由 `BindingScope` 表示，并按 declaration 顺序保存已经成功定义的符号。
+The current program scope must be represented by `BindingScope`, and it must
+preserve successfully defined symbols in declaration order.
+
+DSL term / DSL 术语：`BindingScope preserves declaration order`。
+
+`BindingScope` 只能解析已经成功定义的符号；未定义的名字必须返回空结果并交给 resolver 产生 diagnostic。
+`BindingScope` may resolve only successfully defined symbols; undefined names
+must return an empty result so the resolver can emit diagnostics.
+
+DSL term / DSL 术语：`BindingScope resolves only defined symbols`。
 
 `val` initializer 可以引用它之前已经声明的 `val`。
 A `val` initializer may reference earlier `val` declarations.

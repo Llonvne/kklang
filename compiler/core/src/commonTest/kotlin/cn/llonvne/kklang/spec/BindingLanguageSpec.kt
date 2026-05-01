@@ -82,6 +82,7 @@ val minimalBindingSpec = bindingSpec("minimal-binding") {
 
     boundNode("BoundProgram")
     boundNode("BoundValDeclaration")
+    boundNode("BindingScope")
     boundNode("BindingSymbol")
     boundNode("BoundInteger")
     boundNode("BoundVariable")
@@ -94,6 +95,8 @@ val minimalBindingSpec = bindingSpec("minimal-binding") {
     scopeRule("binding resolver emits BoundProgram")
     scopeRule("binding resolver emits BoundExpression")
     scopeRule("BoundVariable carries BindingSymbol")
+    scopeRule("BindingScope preserves declaration order")
+    scopeRule("BindingScope resolves only defined symbols")
     scopeRule("val bindings are immutable")
     scopeRule("initializer can reference earlier vals")
     scopeRule("initializer cannot reference itself or later vals")

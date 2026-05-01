@@ -33,6 +33,7 @@ class BindingSpecTest {
             listOf(
                 "BoundProgram",
                 "BoundValDeclaration",
+                "BindingScope",
                 "BindingSymbol",
                 "BoundInteger",
                 "BoundVariable",
@@ -57,6 +58,8 @@ class BindingSpecTest {
                 "binding resolver emits BoundProgram",
                 "binding resolver emits BoundExpression",
                 "BoundVariable carries BindingSymbol",
+                "BindingScope preserves declaration order",
+                "BindingScope resolves only defined symbols",
                 "val bindings are immutable",
                 "initializer can reference earlier vals",
                 "initializer cannot reference itself or later vals",

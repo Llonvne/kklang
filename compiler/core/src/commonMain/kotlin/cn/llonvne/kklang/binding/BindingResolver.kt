@@ -23,6 +23,53 @@ data class BindingSymbol(
 )
 
 /**
+ * 当前 binding 作用域的有序符号表。
+ * Ordered symbol table for the current binding scope.
+ */
+class BindingScope private constructor(
+    private val symbolsByName: LinkedHashMap<String, BindingSymbol>,
+) {
+    /**
+     * 按成功定义顺序返回当前作用域中的符号。
+     * Returns symbols in the current scope in successful definition order.
+     */
+    val symbols: List<BindingSymbol>
+        get() = symbolsByName.values.toList()
+
+    /**
+     * 定义一个符号；同名符号已存在时返回 false 且不替换原符号。
+     * Defines one symbol; returns false and keeps the original symbol when the name already exists.
+     */
+    fun define(symbol: BindingSymbol): Boolean {
+        if (symbolsByName.containsKey(symbol.name)) {
+            return false
+        }
+        symbolsByName[symbol.name] = symbol
+        return true
+    }
+
+    /**
+     * 解析当前作用域中已经定义的符号。
+     * Resolves a symbol already defined in the current scope.
+     */
+    fun resolve(name: String): BindingSymbol? =
+        symbolsByName[name]
+
+    /**
+     * BindingScope 的工厂入口。
+     * Factory entry point for BindingScope.
+     */
+    companion object {
+        /**
+         * 创建空的当前作用域。
+         * Creates an empty current scope.
+         */
+        fun empty(): BindingScope =
+            BindingScope(LinkedHashMap())
+    }
+}
+
+/**
  * binding 后 expression 的共同接口，保留原始 AST 和来源 span。
  * Shared interface for bound expressions, preserving original AST and source span.
  */
@@ -164,23 +211,23 @@ class SeedBindingResolver : BindingResolver {
      */
     override fun resolve(program: AstProgram): BindingResult {
         val diagnostics = DiagnosticBag()
-        val symbolsByName = mutableMapOf<String, BindingSymbol>()
+        val scope = BindingScope.empty()
         val boundDeclarations = mutableListOf<BoundValDeclaration>()
 
         for (declaration in program.declarations) {
-            val duplicate = symbolsByName.containsKey(declaration.name)
-            val initializer = bindExpression(declaration.initializer, symbolsByName, diagnostics)
+            val duplicate = scope.resolve(declaration.name) != null
+            val initializer = bindExpression(declaration.initializer, scope, diagnostics)
             if (duplicate) {
                 diagnostics.report("BIND001", "duplicate immutable value", declaration.nameToken.span)
             }
             if (!duplicate && initializer != null) {
                 val symbol = BindingSymbol(name = declaration.name, declaration = declaration)
-                symbolsByName[declaration.name] = symbol
+                scope.define(symbol)
                 boundDeclarations += BoundValDeclaration(syntax = declaration, symbol = symbol, initializer = initializer)
             }
         }
 
-        val expression = bindExpression(program.expression, symbolsByName, diagnostics)
+        val expression = bindExpression(program.expression, scope, diagnostics)
 
         val diagnosticsList = diagnostics.toList()
         if (diagnosticsList.isNotEmpty()) {
@@ -191,7 +238,7 @@ class SeedBindingResolver : BindingResolver {
                 syntax = program,
                 declarations = boundDeclarations.toList(),
                 expression = expression!!,
-                symbols = boundDeclarations.map { it.symbol },
+                symbols = scope.symbols,
             ),
             diagnostics = diagnosticsList,
         )
@@ -203,17 +250,17 @@ class SeedBindingResolver : BindingResolver {
      */
     private fun bindExpression(
         expression: Expression,
-        symbolsByName: Map<String, BindingSymbol>,
+        scope: BindingScope,
         diagnostics: DiagnosticBag,
     ): BoundExpression? =
         when (expression) {
             is IntegerExpression -> BoundInteger(expression)
-            is IdentifierExpression -> bindIdentifier(expression, symbolsByName, diagnostics)
-            is GroupedExpression -> bindGrouped(expression, symbolsByName, diagnostics)
-            is PrefixExpression -> bindPrefix(expression, symbolsByName, diagnostics)
+            is IdentifierExpression -> bindIdentifier(expression, scope, diagnostics)
+            is GroupedExpression -> bindGrouped(expression, scope, diagnostics)
+            is PrefixExpression -> bindPrefix(expression, scope, diagnostics)
             is BinaryExpression -> {
-                val left = bindExpression(expression.left, symbolsByName, diagnostics)
-                val right = bindExpression(expression.right, symbolsByName, diagnostics)
+                val left = bindExpression(expression.left, scope, diagnostics)
+                val right = bindExpression(expression.right, scope, diagnostics)
                 if (left == null || right == null) null else BoundBinary(expression, left, right)
             }
             is MissingExpression -> BoundMissing(expression)
@@ -225,10 +272,10 @@ class SeedBindingResolver : BindingResolver {
      */
     private fun bindGrouped(
         expression: GroupedExpression,
-        symbolsByName: Map<String, BindingSymbol>,
+        scope: BindingScope,
         diagnostics: DiagnosticBag,
     ): BoundExpression? {
-        val inner = bindExpression(expression.expression, symbolsByName, diagnostics) ?: return null
+        val inner = bindExpression(expression.expression, scope, diagnostics) ?: return null
         return BoundGrouped(syntax = expression, inner = inner)
     }
 
@@ -238,10 +285,10 @@ class SeedBindingResolver : BindingResolver {
      */
     private fun bindPrefix(
         expression: PrefixExpression,
-        symbolsByName: Map<String, BindingSymbol>,
+        scope: BindingScope,
         diagnostics: DiagnosticBag,
     ): BoundExpression? {
-        val operand = bindExpression(expression.operand, symbolsByName, diagnostics) ?: return null
+        val operand = bindExpression(expression.operand, scope, diagnostics) ?: return null
         return BoundPrefix(syntax = expression, operand = operand)
     }
 
@@ -251,10 +298,10 @@ class SeedBindingResolver : BindingResolver {
      */
     private fun bindIdentifier(
         expression: IdentifierExpression,
-        symbolsByName: Map<String, BindingSymbol>,
+        scope: BindingScope,
         diagnostics: DiagnosticBag,
     ): BoundExpression? {
-        val symbol = symbolsByName[expression.name]
+        val symbol = scope.resolve(expression.name)
         if (symbol != null) {
             return BoundVariable(syntax = expression, symbol = symbol)
         }
