@@ -23,6 +23,7 @@ val runtimeCTestExecutable = runtimeCBuildDir.map { it.file("kklang_runtime_test
 val runtimeCTestMarker = runtimeCBuildDir.map { it.file("kklang_runtime_test.ok") }
 val runtimeCTestProfileRaw = runtimeCBuildDir.map { it.file("kklang_runtime_test.profraw") }
 val runtimeCTestProfileData = runtimeCBuildDir.map { it.file("kklang_runtime_test.profdata") }
+val runtimeHostDebugExecutable = layout.buildDirectory.file("bin/host/debugTest/test.kexe")
 
 val compileKklangRuntimeC by tasks.registering(Exec::class) {
     inputs.file(runtimeCSourceFile)
@@ -40,6 +41,8 @@ val compileKklangRuntimeC by tasks.registering(Exec::class) {
         "-Wextra",
         "-Werror",
         "-pedantic",
+        "-O0",
+        "-g",
         "-I",
         runtimeCIncludeDir.asFile.absolutePath,
         "-c",
@@ -218,6 +221,11 @@ kotlin {
     }
 
     sourceSets {
+        val hostMain by getting {
+            dependencies {
+                implementation(project(":compiler:core"))
+            }
+        }
         val hostTest by getting {
             dependencies {
                 implementation(kotlin("test"))
@@ -228,6 +236,28 @@ kotlin {
 
 tasks.withType<KotlinNativeLink>().configureEach {
     dependsOn(archiveKklangRuntimeC)
+}
+
+val printRuntimeHostDebugCommand by tasks.registering {
+    dependsOn("linkDebugTestHost")
+    dependsOn(archiveKklangRuntimeC)
+
+    doLast {
+        val executable = runtimeHostDebugExecutable.get().asFile
+        if (!executable.isFile) {
+            error("Missing Kotlin/Native host test executable at ${executable.absolutePath}")
+        }
+
+        println("Kotlin/Native host test executable: ${executable.absolutePath}")
+        println("C runtime source: ${runtimeCSourceFile.asFile.absolutePath}")
+        println("C runtime debug object: ${runtimeCObjectFile.get().asFile.absolutePath}")
+        println("LLDB:")
+        println("  lldb ${executable.absolutePath}")
+        println("  (lldb) target modules add ${runtimeCObjectFile.get().asFile.absolutePath}")
+        println("  (lldb) breakpoint set --file ${runtimeCSourceFile.asFile.name} --name kk_runtime_create")
+        println("  (lldb) breakpoint set --file ${runtimeCSourceFile.asFile.name} --name kk_value_int64")
+        println("  (lldb) run")
+    }
 }
 
 tasks.named("check") {

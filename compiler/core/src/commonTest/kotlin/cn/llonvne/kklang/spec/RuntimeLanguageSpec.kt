@@ -11,6 +11,7 @@ data class RuntimeSpec(
     val abiFunctions: List<RuntimeFunctionSpec>,
     val valueTags: List<RuntimeValueTagSpec>,
     val wrapperTypes: List<RuntimeWrapperSpec>,
+    val debugRules: List<String>,
 )
 
 /**
@@ -49,8 +50,8 @@ fun runtimeSpec(name: String, block: RuntimeSpecBuilder.() -> Unit): RuntimeSpec
     RuntimeSpecBuilder(name).apply(block).build()
 
 /**
- * runtime 规范 builder，记录 ABI、status、value tag 和 wrapper 规则。
- * Runtime spec builder recording ABI, status, value tag, and wrapper rules.
+ * runtime 规范 builder，记录 ABI、status、value tag、wrapper 和调试规则。
+ * Runtime spec builder recording ABI, status, value tag, wrapper, and debug rules.
  */
 @LanguageSpecDsl
 class RuntimeSpecBuilder(private val name: String) {
@@ -59,6 +60,7 @@ class RuntimeSpecBuilder(private val name: String) {
     private val abiFunctions = mutableListOf<RuntimeFunctionSpec>()
     private val valueTags = mutableListOf<RuntimeValueTagSpec>()
     private val wrapperTypes = mutableListOf<RuntimeWrapperSpec>()
+    private val debugRules = mutableListOf<String>()
 
     /**
      * 记录一条 runtime 指导原则。
@@ -101,6 +103,14 @@ class RuntimeSpecBuilder(private val name: String) {
     }
 
     /**
+     * 记录一条 runtime 调试规则。
+     * Records one runtime debug rule.
+     */
+    fun debugRule(text: String) {
+        debugRules += text
+    }
+
+    /**
      * 构造不可变 runtime 规范。
      * Builds the immutable runtime spec.
      */
@@ -112,6 +122,7 @@ class RuntimeSpecBuilder(private val name: String) {
             abiFunctions = abiFunctions.toList(),
             valueTags = valueTags.toList(),
             wrapperTypes = wrapperTypes.toList(),
+            debugRules = debugRules.toList(),
         )
 }
 
@@ -139,4 +150,11 @@ val minimalRuntimeSpec = runtimeSpec("minimal-runtime") {
 
     wrapper("KkRuntime", "does not expose raw C pointers, closes idempotently, and closes child strings")
     wrapper("KkString", "does not expose raw C pointers and rejects use after close")
+    wrapper("KkValue", "type-safe Kotlin Native representation of runtime-backed values")
+    wrapper("KkRuntimeExecutionEngine", "compiles, evaluates, and materializes successful values through the runtime backend")
+    wrapper("KkRuntimeExecutionResult", "returns runtime-backed success values or original compiler and evaluator diagnostics")
+
+    debugRule("C debug symbols for Kotlin Native host tests")
+    debugRule("printRuntimeHostDebugCommand")
+    debugRule("target modules add")
 }

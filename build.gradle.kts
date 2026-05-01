@@ -23,5 +23,6 @@ tasks.register("koverVerify") {
 tasks.check {
     dependsOn(tasks.named("test"))
     dependsOn(tasks.named("koverVerify"))
+    dependsOn(":compiler:core:check")
     dependsOn(":runtime:kn:check")
 }

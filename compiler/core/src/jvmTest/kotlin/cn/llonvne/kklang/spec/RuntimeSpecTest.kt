@@ -61,8 +61,8 @@ class RuntimeSpecTest {
     }
 
     /**
-     * 验证 Markdown runtime 规范包含 DSL 中的 status、函数、value tag 和 wrapper。
-     * Verifies that the Markdown runtime spec contains statuses, functions, value tags, and wrappers from the DSL.
+     * 验证 Markdown runtime 规范包含 DSL 中的 status、函数、value tag、wrapper 和调试规则。
+     * Verifies that the Markdown runtime spec contains statuses, functions, value tags, wrappers, and debug rules from the DSL.
      */
     @Test
     fun `markdown runtime spec contains dsl status functions and value tags`() {
@@ -70,7 +70,8 @@ class RuntimeSpecTest {
         val expectedTerms = minimalRuntimeSpec.statuses.map { it.name } +
             minimalRuntimeSpec.abiFunctions.map { it.name } +
             minimalRuntimeSpec.valueTags.map { it.name } +
-            minimalRuntimeSpec.wrapperTypes.map { it.name }
+            minimalRuntimeSpec.wrapperTypes.map { it.name } +
+            minimalRuntimeSpec.debugRules
 
         for (term in expectedTerms) {
             assertTrue(markdown.contains(term), "missing $term in Markdown runtime spec")

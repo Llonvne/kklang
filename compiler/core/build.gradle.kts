@@ -19,6 +19,15 @@ kotlin {
         }
     }
 
+    val osName = System.getProperty("os.name")
+    val osArch = System.getProperty("os.arch")
+    when {
+        osName == "Mac OS X" && osArch == "aarch64" -> macosArm64("host")
+        osName == "Linux" && osArch == "aarch64" -> linuxArm64("host")
+        osName == "Linux" && (osArch == "amd64" || osArch == "x86_64") -> linuxX64("host")
+        else -> error("Unsupported Kotlin/Native host: $osName $osArch")
+    }
+
     jvmToolchain(25)
 
     sourceSets {
@@ -42,5 +51,6 @@ kover {
 }
 
 tasks.check {
+    dependsOn(tasks.named("allTests"))
     dependsOn(tasks.named("koverVerify"))
 }

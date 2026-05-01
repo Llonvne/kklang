@@ -6,8 +6,7 @@ import cn.llonvne.kklang.frontend.SourceSpan
  * lexer 和 parser 共享的 token 类型标识。
  * Token kind identifier shared by the lexer and parser.
  */
-@JvmInline
-value class TokenKind(val id: String) {
+data class TokenKind(val id: String) {
     init {
         require(id.isNotBlank()) { "token kind id must not be blank" }
     }

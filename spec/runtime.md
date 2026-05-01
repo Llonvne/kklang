@@ -103,6 +103,14 @@ The Kotlin/Native layer must not expose raw C pointers to higher layers.
 `KkRuntime.string(text)` 创建可关闭的 `KkString`。
 `KkRuntime.string(text)` creates a closable `KkString`.
 
+`KkValue` 是 runtime-backed value 的类型安全 Kotlin/Native 表示。
+`KkValue` is the type-safe Kotlin/Native representation of a runtime-backed
+value.
+
+当前 `KkValue.Int64` 必须通过 C ABI `kk_value_int64` materialize。
+The current `KkValue.Int64` must be materialized through the C ABI
+`kk_value_int64`.
+
 `close()` 是幂等的。第一次调用释放底层 C 资源，后续调用不再调用 C ABI。
 `close()` is idempotent. The first call releases the underlying C resource, and
 later calls do not call the C ABI again.
@@ -112,3 +120,55 @@ Closing `KkRuntime` marks any still-open `KkString` created by it as closed.
 
 关闭后的 runtime 或 string 再被使用，必须抛出 `IllegalStateException`。
 Using a closed runtime or string must throw `IllegalStateException`.
+
+## Native Runtime Backend / Native 运行时后端
+
+`KkRuntimeExecutionEngine` 是第一版 Kotlin/Native runtime backend。
+`KkRuntimeExecutionEngine` is the first Kotlin/Native runtime backend.
+
+backend 先调用 compiler pipeline，再复用当前 Core IR evaluator，最后把成功值 materialize 为 `KkValue`。
+The backend first calls the compiler pipeline, then reuses the current Core IR
+evaluator, and finally materializes successful values as `KkValue`.
+
+如果 compiler pipeline 失败，`KkRuntimeExecutionResult.Failure` 必须直接返回 compiler diagnostics。
+If the compiler pipeline fails, `KkRuntimeExecutionResult.Failure` must directly
+return compiler diagnostics.
+
+如果 Core IR evaluator 失败，`KkRuntimeExecutionResult.Failure` 必须直接返回 evaluator diagnostics。
+If the Core IR evaluator fails, `KkRuntimeExecutionResult.Failure` must directly
+return evaluator diagnostics.
+
+如果求值成功并产生 `ExecutionValue.Int64`，backend 必须返回 `KkRuntimeExecutionResult.Success(KkValue.Int64)`。
+If evaluation succeeds and produces `ExecutionValue.Int64`, the backend must
+return `KkRuntimeExecutionResult.Success(KkValue.Int64)`.
+
+Native runtime backend 不定义新的语言语义，也不把算术语义下沉到 C runtime。
+The Native runtime backend does not define new language semantics and does not
+move arithmetic semantics into the C runtime.
+
+## Runtime Debuggability / 运行时可调试性
+
+Kotlin/Native host test 链接的普通 C runtime archive 必须保留
+`C debug symbols for Kotlin Native host tests`。
+The normal C runtime archive linked into Kotlin/Native host tests must keep
+`C debug symbols for Kotlin Native host tests`.
+
+普通 C runtime object 必须使用 `-O0` 和 `-g` 编译，使 LLDB 可以在
+`kklang_runtime.c` 的 C 函数上设置源码断点。
+The normal C runtime object must be compiled with `-O0` and `-g`, so LLDB can
+bind source breakpoints in C functions from `kklang_runtime.c`.
+
+coverage 专用 C object 继续独立编译，并继续携带 coverage instrumentation。
+The coverage-only C object remains separately compiled and keeps coverage
+instrumentation.
+
+`printRuntimeHostDebugCommand` 必须打印 Kotlin/Native host test executable、C
+runtime source、C runtime debug object 和最小 LLDB 命令。
+`printRuntimeHostDebugCommand` must print the Kotlin/Native host test
+executable, C runtime source, C runtime debug object, and the minimal LLDB
+commands.
+
+在设置 C 源码断点前，调试命令必须先通过 `target modules add` 加载 C runtime
+debug object。
+Before setting C source breakpoints, the debug commands must first load the C
+runtime debug object through `target modules add`.

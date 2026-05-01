@@ -36,6 +36,14 @@ Compilation errors must not enter Core IR evaluation.
 If the compiler pipeline returns failure, the execution engine must not call the
 evaluator.
 
+Kotlin/Native runtime backend 使用 `KkRuntimeExecutionEngine`，它复用本规范定义的 compiler pipeline 和 Core IR evaluator。
+The Kotlin/Native runtime backend uses `KkRuntimeExecutionEngine`, which reuses
+the compiler pipeline and Core IR evaluator defined by this spec.
+
+runtime backend 成功时只把当前 `ExecutionValue.Int64` materialize 为 `KkValue.Int64`。
+On success, the runtime backend only materializes the current
+`ExecutionValue.Int64` as `KkValue.Int64`.
+
 ## Core IR / Core IR
 
 Core IR 是 parser AST 和 runtime value model 之间的中间层。
