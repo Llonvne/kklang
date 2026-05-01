@@ -54,16 +54,23 @@ class LexerTest {
 
     @Test
     fun `identifier lexer covers ascii start and continuation branches`() {
-        val source = SourceText.of("sample.kk", "_ A Z a z A0 z9 a@ [ ` {")
+        val source = SourceText.of("sample.kk", "_ A Z a z A0 z9 a_ aA aZ aa az a0 a9 a@ [ ` {")
         val result = Lexer().tokenize(source)
 
         assertTrue(result.hasErrors)
         assertEquals(
-            listOf("_", "A", "Z", "a", "z", "A0", "z9", "a", "@", "[", "`", "{", ""),
+            listOf("_", "A", "Z", "a", "z", "A0", "z9", "a_", "aA", "aZ", "aa", "az", "a0", "a9", "a", "@", "[", "`", "{", ""),
             result.tokens.map { it.lexeme },
         )
         assertEquals(
             listOf(
+                TokenKinds.Identifier,
+                TokenKinds.Identifier,
+                TokenKinds.Identifier,
+                TokenKinds.Identifier,
+                TokenKinds.Identifier,
+                TokenKinds.Identifier,
+                TokenKinds.Identifier,
                 TokenKinds.Identifier,
                 TokenKinds.Identifier,
                 TokenKinds.Identifier,
