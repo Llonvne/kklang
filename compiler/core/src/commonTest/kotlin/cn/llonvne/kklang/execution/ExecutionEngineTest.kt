@@ -39,14 +39,14 @@ class ExecutionEngineTest {
     }
 
     /**
-     * 验证 lexer、parser 和 lowering 失败会被 execution engine 直接返回。
-     * Verifies that lexer, parser, and lowering failures are returned directly by the execution engine.
+     * 验证 lexer、parser 和 type checking 失败会被 execution engine 直接返回。
+     * Verifies that lexer, parser, and type-checking failures are returned directly by the execution engine.
      */
     @Test
-    fun `engine returns lexer parser and lowering failures without evaluation`() {
+    fun `engine returns lexer parser and type checking failures without evaluation`() {
         assertFailureCodes("@", "LEX001")
         assertFailureCodes("1 +", "PARSE001")
-        assertFailureCodes("name", "EXEC001")
+        assertFailureCodes("name", "TYPE001")
     }
 
     /**

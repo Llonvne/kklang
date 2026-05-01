@@ -8,9 +8,9 @@ This spec defines the first minimal execution path for `kklang`.
 第一版执行链路只连接现有 seed expression grammar。
 The first execution path only connects the existing seed expression grammar.
 
-执行顺序如下：source text、lexer、parser、Core IR lowering、Core IR evaluation、execution result。
-The execution order is: source text, lexer, parser, Core IR lowering, Core IR
-evaluation, execution result.
+执行顺序如下：source text、lexer、parser、type checking、Core IR lowering、Core IR evaluation、execution result。
+The execution order is: source text, lexer, parser, type checking, Core IR
+lowering, Core IR evaluation, execution result.
 
 执行器必须通过 compiler pipeline 进入 lexer、parser 和 Core IR lowering。
 The execution engine must enter lexing, parsing, and Core IR lowering through
@@ -25,9 +25,9 @@ type system.
 执行结果必须是 `Success(value)` 或 `Failure(diagnostics)`。
 Execution result must be either `Success(value)` or `Failure(diagnostics)`.
 
-如果 lexer、parser、lowering 或 evaluator 产生诊断，执行结果必须是 failure。
-If the lexer, parser, lowering, or evaluator produces diagnostics, execution
-must return failure.
+如果 lexer、parser、type checker、lowering 或 evaluator 产生诊断，执行结果必须是 failure。
+If the lexer, parser, type checker, lowering, or evaluator produces diagnostics,
+execution must return failure.
 
 编译错误不得进入 Core IR evaluation。
 Compilation errors must not enter Core IR evaluation.
@@ -46,9 +46,8 @@ On success, the runtime backend only materializes the current
 
 ## Core IR / Core IR
 
-Core IR 是 parser AST 和 runtime value model 之间的中间层。
-Core IR is the intermediate layer between parser AST and the runtime value
-model.
+Core IR 是 typed AST 和 runtime value model 之间的中间层。
+Core IR is the intermediate layer between typed AST and the runtime value model.
 
 第一版 Core IR 只包含整数和整数运算。
 The first Core IR contains only integers and integer operations.
@@ -80,12 +79,13 @@ Division by zero must produce `EXEC002`.
 
 ## Unsupported Surface / 不支持的表面
 
-identifier expression 尚无执行语义，必须产生 `EXEC001`。
-Identifier expressions do not have execution semantics yet and must produce
-`EXEC001`.
+identifier expression 尚无绑定或作用域语义，必须在类型检查阶段产生 `TYPE001`。
+Identifier expressions do not have binding or scope semantics yet and must
+produce `TYPE001` during type checking.
 
-missing expression 或未定义的 AST 形态必须产生 `EXEC001`。
-Missing expressions or undefined AST forms must produce `EXEC001`.
+malformed typed expression 或 lowering 防御分支必须产生 `EXEC001`。
+Malformed typed expressions or lowering defensive branches must produce
+`EXEC001`.
 
 ## Diagnostics / 诊断
 

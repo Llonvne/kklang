@@ -1,5 +1,6 @@
 package cn.llonvne.kklang.frontend.parsing
 
+import cn.llonvne.kklang.frontend.SourceSpan
 import cn.llonvne.kklang.frontend.SourceText
 import cn.llonvne.kklang.frontend.lexing.Lexer
 import cn.llonvne.kklang.frontend.lexing.LexerConfig
@@ -27,6 +28,17 @@ class ParserTest {
 
         assertFalse(result.hasErrors)
         assertEquals("(* (- (group (+ id(alpha) int(2)))) (+ int(3)))", result.expression.render())
+    }
+
+    /**
+     * 验证 AstProgram 会暴露根 expression 的 span。
+     * Verifies that AstProgram exposes the root expression span.
+     */
+    @Test
+    fun `ast program exposes root expression span`() {
+        val program = AstProgram(parse("1").expression)
+
+        assertEquals(SourceSpan("sample.kk", 0, 1), program.span)
     }
 
     /**

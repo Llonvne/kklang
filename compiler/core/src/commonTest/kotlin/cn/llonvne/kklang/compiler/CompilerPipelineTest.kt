@@ -9,9 +9,15 @@ import cn.llonvne.kklang.execution.IrEvaluator
 import cn.llonvne.kklang.execution.IrInt64
 import cn.llonvne.kklang.execution.IrLowerer
 import cn.llonvne.kklang.execution.IrLoweringResult
+import cn.llonvne.kklang.execution.IrUnary
+import cn.llonvne.kklang.execution.IrUnaryOperator
 import cn.llonvne.kklang.frontend.SourceSpan
 import cn.llonvne.kklang.frontend.SourceText
+import cn.llonvne.kklang.frontend.diagnostics.Diagnostic
 import cn.llonvne.kklang.frontend.parsing.Parser
+import cn.llonvne.kklang.typechecking.TypeCheckResult
+import cn.llonvne.kklang.typechecking.TypeChecker
+import cn.llonvne.kklang.typechecking.TypeRef
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -32,9 +38,29 @@ class CompilerPipelineTest {
         val result = CompilerPipeline().compile(CompilationInput(SourceText.of("sample.kk", "1 + 2 * 3")))
 
         assertIs<CompilationResult.Success>(result)
-        assertEquals(listOf(CompilerPhase.Lexing, CompilerPhase.Parsing, CompilerPhase.Lowering), result.phaseTrace)
+        assertEquals(
+            listOf(CompilerPhase.Lexing, CompilerPhase.Parsing, CompilerPhase.TypeChecking, CompilerPhase.Lowering),
+            result.phaseTrace,
+        )
         assertEquals(SourceSpan("sample.kk", 0, 9), result.program.span)
+        assertEquals(TypeRef.Int64, result.program.type)
         assertFalse(result.hasErrors)
+    }
+
+    /**
+     * 验证 compiled program 直接暴露 Core IR span 和根类型。
+     * Verifies that a compiled program directly exposes the Core IR span and root type.
+     */
+    @Test
+    fun `compiled program exposes span and type`() {
+        val span = SourceSpan("sample.kk", 0, 1)
+        val program = CompiledProgram(
+            expression = IrUnary(IrUnaryOperator.Plus, IrInt64(1, span), span),
+            type = TypeRef.Int64,
+        )
+
+        assertEquals(span, program.span)
+        assertEquals(TypeRef.Int64, program.type)
     }
 
     /**
@@ -59,22 +85,49 @@ class CompilerPipelineTest {
     }
 
     /**
-     * 验证 parsing diagnostics 会阻止 lowering 运行。
-     * Verifies that parsing diagnostics prevent lowering from running.
+     * 验证 parsing diagnostics 会阻止 type checker 和 lowering 运行。
+     * Verifies that parsing diagnostics prevent the type checker and lowering from running.
      */
     @Test
-    fun `pipeline stops before lowering when parsing fails`() {
+    fun `pipeline stops before type checking when parsing fails`() {
+        var typeCheckerWasCalled = false
         var lowererWasCalled = false
         val result = CompilerPipeline(
+            typeChecker = TypeChecker {
+                typeCheckerWasCalled = true
+                TypeCheckResult(null, emptyList())
+            },
             lowerer = IrLowerer {
                 lowererWasCalled = true
-                IrLoweringResult(IrInt64(1, it.span), emptyList())
+                IrLoweringResult(IrInt64(1, it.syntax.span), emptyList())
             },
         ).compile(CompilationInput(SourceText.of("sample.kk", "1 +")))
 
         assertIs<CompilationResult.Failure>(result)
         assertEquals(listOf(CompilerPhase.Lexing, CompilerPhase.Parsing), result.phaseTrace)
         assertEquals(listOf("PARSE001"), result.diagnostics.map { it.code })
+        assertFalse(typeCheckerWasCalled)
+        assertFalse(lowererWasCalled)
+    }
+
+    /**
+     * 验证 type checking diagnostics 会阻止 lowering 运行。
+     * Verifies that type-checking diagnostics prevent lowering from running.
+     */
+    @Test
+    fun `pipeline stops before lowering when type checking fails`() {
+        var lowererWasCalled = false
+        val source = SourceText.of("sample.kk", "name")
+        val result = CompilerPipeline(
+            lowerer = IrLowerer {
+                lowererWasCalled = true
+                IrLoweringResult(IrInt64(1, it.syntax.span), emptyList())
+            },
+        ).compile(CompilationInput(source))
+
+        assertIs<CompilationResult.Failure>(result)
+        assertEquals(listOf(CompilerPhase.Lexing, CompilerPhase.Parsing, CompilerPhase.TypeChecking), result.phaseTrace)
+        assertEquals(listOf("TYPE001"), result.diagnostics.map { it.code })
         assertFalse(lowererWasCalled)
     }
 
@@ -84,12 +137,36 @@ class CompilerPipelineTest {
      */
     @Test
     fun `pipeline returns lowering diagnostics without compiled program`() {
-        val source = SourceText.of("sample.kk", "name")
-        val result = CompilerPipeline().compile(CompilationInput(source))
+        val source = SourceText.of("sample.kk", "1")
+        val result = CompilerPipeline(
+            lowerer = IrLowerer {
+                IrLoweringResult(
+                    ir = null,
+                    diagnostics = listOf(Diagnostic("EXEC001", "lowering failure", it.syntax.span)),
+                )
+            },
+        ).compile(CompilationInput(source))
 
         assertIs<CompilationResult.Failure>(result)
-        assertEquals(listOf(CompilerPhase.Lexing, CompilerPhase.Parsing, CompilerPhase.Lowering), result.phaseTrace)
+        assertEquals(
+            listOf(CompilerPhase.Lexing, CompilerPhase.Parsing, CompilerPhase.TypeChecking, CompilerPhase.Lowering),
+            result.phaseTrace,
+        )
         assertEquals(listOf("EXEC001"), result.diagnostics.map { it.code })
+    }
+
+    /**
+     * 验证 type checker 违反内部契约时会被转换为 COMPILER001。
+     * Verifies that a type-checker contract violation is converted into COMPILER001.
+     */
+    @Test
+    fun `pipeline rejects type checker success without typed expression`() {
+        val result = CompilerPipeline(
+            typeChecker = TypeChecker { TypeCheckResult(null, emptyList()) },
+        ).compile(CompilationInput(SourceText.of("sample.kk", "1")))
+
+        assertIs<CompilationResult.Failure>(result)
+        assertEquals(listOf("COMPILER001"), result.diagnostics.map { it.code })
     }
 
     /**

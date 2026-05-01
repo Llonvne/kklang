@@ -8,8 +8,10 @@ import cn.llonvne.kklang.frontend.SourceText
 import cn.llonvne.kklang.frontend.diagnostics.Diagnostic
 import cn.llonvne.kklang.frontend.lexing.Lexer
 import cn.llonvne.kklang.frontend.lexing.Token
-import cn.llonvne.kklang.frontend.parsing.AstProgram
 import cn.llonvne.kklang.frontend.parsing.Parser
+import cn.llonvne.kklang.typechecking.SeedTypeChecker
+import cn.llonvne.kklang.typechecking.TypeChecker
+import cn.llonvne.kklang.typechecking.TypeRef
 
 /**
  * 编译请求的最小输入，目前只包含一份源码文本。
@@ -18,11 +20,12 @@ import cn.llonvne.kklang.frontend.parsing.Parser
 data class CompilationInput(val source: SourceText)
 
 /**
- * 成功编译后的最小 program，目前只包装一个 Core IR expression。
- * Minimal successfully compiled program; it currently wraps one Core IR expression.
+ * 成功编译后的最小 program，目前包装一个 Core IR expression 和根类型。
+ * Minimal successfully compiled program; it currently wraps one Core IR expression and root type.
  */
 data class CompiledProgram(
     val expression: IrExpression,
+    val type: TypeRef,
 ) {
     val span: SourceSpan
         get() = expression.span
@@ -35,6 +38,7 @@ data class CompiledProgram(
 enum class CompilerPhase {
     Lexing,
     Parsing,
+    TypeChecking,
     Lowering,
 }
 
@@ -73,12 +77,13 @@ sealed interface CompilationResult {
 }
 
 /**
- * 最小编译管线，按 lexing、parsing、lowering 顺序运行并在诊断出现时短路。
- * Minimal compiler pipeline that runs lexing, parsing, and lowering in order and short-circuits on diagnostics.
+ * 最小编译管线，按 lexing、parsing、type checking、lowering 顺序运行并在诊断出现时短路。
+ * Minimal compiler pipeline that runs lexing, parsing, type checking, and lowering in order and short-circuits on diagnostics.
  */
 class CompilerPipeline(
     private val lexer: Lexer = Lexer(),
     private val parserFactory: (List<Token>) -> Parser = { Parser(it) },
+    private val typeChecker: TypeChecker = SeedTypeChecker(),
     private val lowerer: IrLowerer = CoreIrLowerer(),
 ) {
     /**
@@ -100,9 +105,25 @@ class CompilerPipeline(
             return failure(parseResult.diagnostics, phaseTrace)
         }
 
+        phaseTrace += CompilerPhase.TypeChecking
+        val typeCheckResult = typeChecker.check(parseResult.expression)
+        if (typeCheckResult.hasErrors) {
+            return failure(typeCheckResult.diagnostics, phaseTrace)
+        }
+
+        val typedExpression = typeCheckResult.expression ?: return failure(
+            listOf(
+                Diagnostic(
+                    code = "COMPILER001",
+                    message = "type checking succeeded without typed expression",
+                    span = parseResult.expression.span,
+                ),
+            ),
+            phaseTrace,
+        )
+
         phaseTrace += CompilerPhase.Lowering
-        val program = AstProgram(parseResult.expression)
-        val loweringResult = lowerer.lower(program.expression)
+        val loweringResult = lowerer.lower(typedExpression)
         if (loweringResult.hasErrors) {
             return failure(loweringResult.diagnostics, phaseTrace)
         }
@@ -112,14 +133,14 @@ class CompilerPipeline(
                 Diagnostic(
                     code = "COMPILER001",
                     message = "lowering succeeded without Core IR",
-                    span = program.span,
+                    span = typedExpression.syntax.span,
                 ),
             ),
             phaseTrace,
         )
 
         return CompilationResult.Success(
-            program = CompiledProgram(expression),
+            program = CompiledProgram(expression = expression, type = typedExpression.type),
             phaseTrace = phaseTrace.toList(),
         )
     }

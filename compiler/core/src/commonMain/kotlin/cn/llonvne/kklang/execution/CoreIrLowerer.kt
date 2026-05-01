@@ -3,13 +3,11 @@ package cn.llonvne.kklang.execution
 import cn.llonvne.kklang.frontend.diagnostics.Diagnostic
 import cn.llonvne.kklang.frontend.diagnostics.DiagnosticBag
 import cn.llonvne.kklang.frontend.lexing.TokenKinds
-import cn.llonvne.kklang.frontend.parsing.BinaryExpression
-import cn.llonvne.kklang.frontend.parsing.Expression
-import cn.llonvne.kklang.frontend.parsing.GroupedExpression
-import cn.llonvne.kklang.frontend.parsing.IdentifierExpression
-import cn.llonvne.kklang.frontend.parsing.IntegerExpression
-import cn.llonvne.kklang.frontend.parsing.MissingExpression
-import cn.llonvne.kklang.frontend.parsing.PrefixExpression
+import cn.llonvne.kklang.typechecking.TypedBinary
+import cn.llonvne.kklang.typechecking.TypedExpression
+import cn.llonvne.kklang.typechecking.TypedGrouped
+import cn.llonvne.kklang.typechecking.TypedInteger
+import cn.llonvne.kklang.typechecking.TypedPrefix
 
 /**
  * AST 到 Core IR lowering 的结果，成功时 ir 非空，失败时 diagnostics 非空。
@@ -24,57 +22,55 @@ data class IrLoweringResult(
 }
 
 /**
- * AST 到 Core IR lowering 的可替换接口。
- * Replaceable interface for lowering AST expressions to Core IR.
+ * typed AST 到 Core IR lowering 的可替换接口。
+ * Replaceable interface for lowering typed AST expressions to Core IR.
  */
 fun interface IrLowerer {
     /**
-     * 降级一个 AST expression 并返回 Core IR 或 diagnostics。
-     * Lowers one AST expression and returns either Core IR or diagnostics.
+     * 降级一个 typed AST expression 并返回 Core IR 或 diagnostics。
+     * Lowers one typed AST expression and returns either Core IR or diagnostics.
      */
-    fun lower(expression: cn.llonvne.kklang.frontend.parsing.Expression): IrLoweringResult
+    fun lower(expression: TypedExpression): IrLoweringResult
 }
 
 /**
- * 当前最小 lowerer，只把已规范化的整数表达式降级为 Core IR。
- * Current minimal lowerer that lowers only specified integer expressions into Core IR.
+ * 当前最小 lowerer，只把已类型检查的整数表达式降级为 Core IR。
+ * Current minimal lowerer that lowers only type-checked integer expressions into Core IR.
  */
 class CoreIrLowerer : IrLowerer {
     /**
-     * 降级根 expression，并在过程中收集 lowering diagnostics。
-     * Lowers the root expression while collecting lowering diagnostics.
+     * 降级 typed 根 expression，并在过程中收集 lowering diagnostics。
+     * Lowers the typed root expression while collecting lowering diagnostics.
      */
-    override fun lower(expression: Expression): IrLoweringResult {
+    override fun lower(expression: TypedExpression): IrLoweringResult {
         val diagnostics = DiagnosticBag()
         val ir = lowerExpression(expression, diagnostics)
         return IrLoweringResult(ir = ir, diagnostics = diagnostics.toList())
     }
 
     /**
-     * 按 AST expression 类型分派 lowering。
-     * Dispatches lowering by AST expression type.
+     * 按 typed AST expression 类型分派 lowering。
+     * Dispatches lowering by typed AST expression type.
      */
-    private fun lowerExpression(expression: Expression, diagnostics: DiagnosticBag): IrExpression? =
+    private fun lowerExpression(expression: TypedExpression, diagnostics: DiagnosticBag): IrExpression? =
         when (expression) {
-            is IntegerExpression -> lowerInteger(expression, diagnostics)
-            is GroupedExpression -> lowerExpression(expression.expression, diagnostics)
-            is PrefixExpression -> lowerPrefix(expression, diagnostics)
-            is BinaryExpression -> lowerBinary(expression, diagnostics)
-            is IdentifierExpression -> unsupported(expression, diagnostics)
-            is MissingExpression -> unsupported(expression, diagnostics)
+            is TypedInteger -> lowerInteger(expression, diagnostics)
+            is TypedGrouped -> lowerExpression(expression.inner, diagnostics)
+            is TypedPrefix -> lowerPrefix(expression, diagnostics)
+            is TypedBinary -> lowerBinary(expression, diagnostics)
         }
 
     /**
      * 将整数字面量文本转换为 Int64 IR，超出范围时报告 EXEC003。
      * Converts integer literal text to Int64 IR and reports EXEC003 when it is out of range.
      */
-    private fun lowerInteger(expression: IntegerExpression, diagnostics: DiagnosticBag): IrExpression? {
-        val value = expression.digits.toLongOrNull()
+    private fun lowerInteger(expression: TypedInteger, diagnostics: DiagnosticBag): IrExpression? {
+        val value = expression.syntax.digits.toLongOrNull()
         return if (value == null) {
-            diagnostics.report("EXEC003", "Int64 overflow", expression.span)
+            diagnostics.report("EXEC003", "Int64 overflow", expression.syntax.span)
             null
         } else {
-            IrInt64(value = value, span = expression.span)
+            IrInt64(value = value, span = expression.syntax.span)
         }
     }
 
@@ -82,9 +78,9 @@ class CoreIrLowerer : IrLowerer {
      * 降级当前支持的一元前缀表达式。
      * Lowers the currently supported unary prefix expressions.
      */
-    private fun lowerPrefix(expression: PrefixExpression, diagnostics: DiagnosticBag): IrExpression? {
+    private fun lowerPrefix(expression: TypedPrefix, diagnostics: DiagnosticBag): IrExpression? {
         val operand = lowerExpression(expression.operand, diagnostics) ?: return null
-        val operator = when (expression.operator.kind) {
+        val operator = when (expression.syntax.operator.kind) {
             TokenKinds.Plus -> IrUnaryOperator.Plus
             TokenKinds.Minus -> IrUnaryOperator.Minus
             else -> {
@@ -92,21 +88,21 @@ class CoreIrLowerer : IrLowerer {
                 return null
             }
         }
-        return IrUnary(operator = operator, operand = operand, span = expression.span)
+        return IrUnary(operator = operator, operand = operand, span = expression.syntax.span)
     }
 
     /**
      * 降级当前支持的二元表达式，并传播左右 operand 的失败。
      * Lowers the currently supported binary expressions and propagates left or right operand failures.
      */
-    private fun lowerBinary(expression: BinaryExpression, diagnostics: DiagnosticBag): IrExpression? {
+    private fun lowerBinary(expression: TypedBinary, diagnostics: DiagnosticBag): IrExpression? {
         val left = lowerExpression(expression.left, diagnostics)
         val right = lowerExpression(expression.right, diagnostics)
         if (left == null || right == null) {
             return null
         }
 
-        val operator = when (expression.operator.kind) {
+        val operator = when (expression.syntax.operator.kind) {
             TokenKinds.Plus -> IrBinaryOperator.Plus
             TokenKinds.Minus -> IrBinaryOperator.Minus
             TokenKinds.Star -> IrBinaryOperator.Multiply
@@ -116,15 +112,15 @@ class CoreIrLowerer : IrLowerer {
                 return null
             }
         }
-        return IrBinary(left = left, operator = operator, right = right, span = expression.span)
+        return IrBinary(left = left, operator = operator, right = right, span = expression.syntax.span)
     }
 
     /**
-     * 报告当前执行范围不支持的 AST expression。
-     * Reports an AST expression unsupported by the current execution scope.
+     * 报告 malformed typed expression 的 lowering 防御诊断。
+     * Reports a lowering defensive diagnostic for a malformed typed expression.
      */
-    private fun unsupported(expression: Expression, diagnostics: DiagnosticBag): IrExpression? {
-        diagnostics.report("EXEC001", "unsupported expression", expression.span)
+    private fun unsupported(expression: TypedExpression, diagnostics: DiagnosticBag): IrExpression? {
+        diagnostics.report("EXEC001", "unsupported expression", expression.syntax.span)
         return null
     }
 }

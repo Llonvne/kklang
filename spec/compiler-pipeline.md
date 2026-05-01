@@ -12,9 +12,10 @@ execution backends.
 当前管线只处理已有的 seed expression grammar。
 The current pipeline only handles the existing seed expression grammar.
 
-当前管线不定义类型检查、优化、字节码生成、对象布局或完整模块系统。
-The current pipeline does not define type checking, optimization, bytecode
-generation, object layout, or a full module system.
+当前管线只定义最小类型检查骨架，不定义优化、字节码生成、对象布局或完整模块系统。
+The current pipeline defines only the minimal type-checking skeleton; it does
+not define optimization, bytecode generation, object layout, or a full module
+system.
 
 ## Inputs And Outputs / 输入与输出
 
@@ -42,6 +43,9 @@ The current `AstProgram` wraps exactly one expression.
 当前 `CompiledProgram` 只包装一个 Core IR expression。
 The current `CompiledProgram` wraps exactly one Core IR expression.
 
+当前 `CompiledProgram` 同时暴露根表达式的类型。
+The current `CompiledProgram` also exposes the type of the root expression.
+
 这个模型是有意的最小形态，后续可以扩展为 statements、declarations、modules 和 packages。
 This model is intentionally minimal and may later grow into statements,
 declarations, modules, and packages.
@@ -53,7 +57,8 @@ Compiler phases must run in this order.
 
 1. lexing / 词法分析
 2. parsing / 语法分析
-3. lowering / Core IR 降级
+3. type checking / 类型检查
+4. lowering / Core IR 降级
 
 如果某个阶段产生 diagnostics，管线必须立即停止，不得运行后续阶段。
 If any phase produces diagnostics, the pipeline must stop immediately and must

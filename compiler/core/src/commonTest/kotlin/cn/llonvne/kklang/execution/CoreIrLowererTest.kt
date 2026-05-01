@@ -6,12 +6,13 @@ import cn.llonvne.kklang.frontend.lexing.Lexer
 import cn.llonvne.kklang.frontend.lexing.Token
 import cn.llonvne.kklang.frontend.lexing.TokenKind
 import cn.llonvne.kklang.frontend.parsing.BinaryExpression
-import cn.llonvne.kklang.frontend.parsing.GroupedExpression
-import cn.llonvne.kklang.frontend.parsing.IdentifierExpression
-import cn.llonvne.kklang.frontend.parsing.IntegerExpression
-import cn.llonvne.kklang.frontend.parsing.MissingExpression
 import cn.llonvne.kklang.frontend.parsing.Parser
 import cn.llonvne.kklang.frontend.parsing.PrefixExpression
+import cn.llonvne.kklang.typechecking.SeedTypeChecker
+import cn.llonvne.kklang.typechecking.TypeRef
+import cn.llonvne.kklang.typechecking.TypedBinary
+import cn.llonvne.kklang.typechecking.TypedExpression
+import cn.llonvne.kklang.typechecking.TypedPrefix
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -19,16 +20,16 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
- * 覆盖 CoreIrLowerer 支持的表达式、unsupported 分支和辅助渲染。
- * Covers CoreIrLowerer supported expressions, unsupported branches, and helper rendering.
+ * 覆盖 CoreIrLowerer 支持的 typed AST、失败传播和辅助渲染。
+ * Covers CoreIrLowerer supported typed AST, failure propagation, and helper rendering.
  */
 class CoreIrLowererTest {
     /**
-     * 验证 seed 表达式语法中的支持形式都能降级为 Core IR。
-     * Verifies that all supported seed expression forms lower to Core IR.
+     * 验证 seed 表达式语法中的 typed 支持形式都能降级为 Core IR。
+     * Verifies that all supported typed seed expression forms lower to Core IR.
      */
     @Test
-    fun `lowerer lowers all supported seed expression forms`() {
+    fun `lowerer lowers all supported typed seed expression forms`() {
         val result = lower("-(1 + 2) * +3")
 
         assertFalse(result.hasErrors)
@@ -39,96 +40,69 @@ class CoreIrLowererTest {
     }
 
     /**
-     * 验证标识符在当前执行范围内被报告为 unsupported。
-     * Verifies that identifiers are reported as unsupported in the current execution scope.
-     */
-    @Test
-    fun `lowerer reports unsupported identifiers`() {
-        val result = lower("name")
-
-        assertTrue(result.hasErrors)
-        assertEquals("EXEC001", result.diagnostics.single().code)
-        assertEquals(null, result.ir)
-    }
-
-    /**
-     * 验证超出 Int64 范围的整数字面量产生 EXEC003。
-     * Verifies that integer literals outside Int64 range produce EXEC003.
+     * 验证超出 Int64 范围的 typed 整数字面量产生 EXEC003。
+     * Verifies that typed integer literals outside Int64 range produce EXEC003.
      */
     @Test
     fun `lowerer reports invalid integer literals`() {
-        val expression = IntegerExpression(
-            token = Lexer().tokenize(SourceText.of("sample.kk", "9223372036854775808")).tokens.first(),
-        )
-
-        val result = CoreIrLowerer().lower(expression)
+        val result = CoreIrLowerer().lower(type("9223372036854775808"))
 
         assertTrue(result.hasErrors)
         assertEquals("EXEC003", result.diagnostics.single().code)
     }
 
     /**
-     * 验证 MissingExpression 会被 lowering 报告为 unsupported。
-     * Verifies that MissingExpression is reported as unsupported during lowering.
+     * 验证 malformed typed prefix 和 binary operator 都产生 EXEC001 防御诊断。
+     * Verifies that malformed typed prefix and binary operators both produce defensive EXEC001 diagnostics.
      */
     @Test
-    fun `lowerer reports missing expressions`() {
-        val span = SourceSpan("sample.kk", 0, 0)
-        val result = CoreIrLowerer().lower(MissingExpression(span))
-
-        assertTrue(result.hasErrors)
-        assertEquals("EXEC001", result.diagnostics.single().code)
-    }
-
-    /**
-     * 验证未知 prefix 和 binary operator 都产生 EXEC001。
-     * Verifies that unknown prefix and binary operators both produce EXEC001.
-     */
-    @Test
-    fun `lowerer reports unsupported prefix and binary operators`() {
-        val left = parse("1")
-        val right = parse("2")
+    fun `lowerer reports malformed typed prefix and binary operators`() {
+        val one = type("1")
+        val two = type("2")
         val unknownOperator = Token(TokenKind("unknown_operator"), "?", SourceSpan("sample.kk", 0, 1))
-        val prefix = PrefixExpression(operator = unknownOperator, operand = left)
-        val binary = BinaryExpression(left = left, operator = unknownOperator, right = right)
+        val prefixSyntax = PrefixExpression(operator = unknownOperator, operand = parse("1"))
+        val binarySyntax = BinaryExpression(left = parse("1"), operator = unknownOperator, right = parse("2"))
+        val prefix = TypedPrefix(syntax = prefixSyntax, operand = one, type = TypeRef.Int64)
+        val binary = TypedBinary(syntax = binarySyntax, left = one, right = two, type = TypeRef.Int64)
 
         assertEquals("EXEC001", CoreIrLowerer().lower(prefix).diagnostics.single().code)
         assertEquals("EXEC001", CoreIrLowerer().lower(binary).diagnostics.single().code)
     }
 
     /**
-     * 验证二元表达式左右两侧的 lowering 失败都会传播。
-     * Verifies that lowering failures from either side of a binary expression are propagated.
+     * 验证二元 typed 表达式左右两侧的 lowering 失败都会传播。
+     * Verifies that lowering failures from either side of a typed binary expression are propagated.
      */
     @Test
     fun `lowerer reports left and right binary lowering failures`() {
-        val one = parse("1")
-        val name = parse("name")
         val plus = Lexer().tokenize(SourceText.of("sample.kk", "+")).tokens.first()
+        val leftFailure = TypedBinary(
+            syntax = BinaryExpression(left = parse("9223372036854775808"), operator = plus, right = parse("1")),
+            left = type("9223372036854775808"),
+            right = type("1"),
+            type = TypeRef.Int64,
+        )
+        val rightFailure = TypedBinary(
+            syntax = BinaryExpression(left = parse("1"), operator = plus, right = parse("9223372036854775808")),
+            left = type("1"),
+            right = type("9223372036854775808"),
+            type = TypeRef.Int64,
+        )
 
-        val leftFailure = CoreIrLowerer().lower(BinaryExpression(left = name, operator = plus, right = one))
-        val rightFailure = CoreIrLowerer().lower(BinaryExpression(left = one, operator = plus, right = name))
-
-        assertEquals("EXEC001", leftFailure.diagnostics.single().code)
-        assertEquals("EXEC001", rightFailure.diagnostics.single().code)
+        assertEquals("EXEC003", CoreIrLowerer().lower(leftFailure).diagnostics.single().code)
+        assertEquals("EXEC003", CoreIrLowerer().lower(rightFailure).diagnostics.single().code)
     }
 
     /**
-     * 验证分组表达式内部的 lowering 失败会向外传播。
-     * Verifies that a lowering failure inside a grouped expression propagates outward.
+     * 验证 prefix operand 的 lowering 失败会向外传播。
+     * Verifies that a lowering failure from a typed prefix operand propagates outward.
      */
     @Test
-    fun `lowerer reports nested lowering failures`() {
-        val grouped = GroupedExpression(
-            leftParen = Lexer().tokenize(SourceText.of("sample.kk", "(")).tokens.first(),
-            expression = parse("name"),
-            rightParen = Lexer().tokenize(SourceText.of("sample.kk", ")")).tokens.first(),
-        )
-
-        val result = CoreIrLowerer().lower(grouped)
+    fun `lowerer reports prefix operand lowering failure`() {
+        val result = lower("+9223372036854775808")
 
         assertTrue(result.hasErrors)
-        assertEquals("EXEC001", result.diagnostics.single().code)
+        assertEquals("EXEC003", result.diagnostics.single().code)
     }
 
     /**
@@ -144,11 +118,18 @@ class CoreIrLowererTest {
     }
 
     /**
-     * 解析并 lowering 一段测试源码。
-     * Parses and lowers one test source snippet.
+     * 解析、类型检查并 lowering 一段测试源码。
+     * Parses, type-checks, and lowers one test source snippet.
      */
     private fun lower(text: String): IrLoweringResult =
-        CoreIrLowerer().lower(parse(text))
+        CoreIrLowerer().lower(type(text))
+
+    /**
+     * 解析并类型检查一段测试源码。
+     * Parses and type-checks one test source snippet.
+     */
+    private fun type(text: String): TypedExpression =
+        requireNotNull(SeedTypeChecker().check(parse(text)).expression)
 
     /**
      * 使用默认 lexer/parser 解析一段测试源码。

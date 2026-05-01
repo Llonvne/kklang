@@ -79,6 +79,7 @@ class ExecutionSpecBuilder(private val name: String) {
 val minimalExecutionSpec = executionSpec("minimal-execution") {
     phase("lexer")
     phase("parser")
+    phase("type checking")
     phase("core ir lowering")
     phase("core ir evaluation")
 

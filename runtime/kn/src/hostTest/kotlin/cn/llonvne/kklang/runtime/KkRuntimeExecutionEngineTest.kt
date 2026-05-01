@@ -48,7 +48,7 @@ class KkRuntimeExecutionEngineTest {
     @Test
     fun `runtime backend returns compiler diagnostics`() {
         assertFailureCodes("@", "LEX001")
-        assertFailureCodes("name", "EXEC001")
+        assertFailureCodes("name", "TYPE001")
     }
 
     /**

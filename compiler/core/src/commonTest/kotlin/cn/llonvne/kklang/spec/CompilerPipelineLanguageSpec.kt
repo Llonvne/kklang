@@ -79,6 +79,7 @@ class CompilerPipelineSpecBuilder(private val name: String) {
 val minimalCompilerPipelineSpec = compilerPipelineSpec("minimal-compiler-pipeline") {
     phase("lexing")
     phase("parsing")
+    phase("type checking")
     phase("lowering")
 
     resultType("CompiledProgram")
@@ -86,7 +87,8 @@ val minimalCompilerPipelineSpec = compilerPipelineSpec("minimal-compiler-pipelin
     resultType("CompilationResult.Failure")
 
     stopRule("lexer diagnostics stop before parsing")
-    stopRule("parser diagnostics stop before lowering")
+    stopRule("parser diagnostics stop before type checking")
+    stopRule("type checker diagnostics stop before lowering")
     stopRule("lowering diagnostics stop before execution")
 
     diagnostic("COMPILER001", "internal compiler contract violation")

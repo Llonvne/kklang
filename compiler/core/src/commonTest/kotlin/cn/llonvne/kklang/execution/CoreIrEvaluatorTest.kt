@@ -14,6 +14,123 @@ class CoreIrEvaluatorTest {
     private val span = SourceSpan("sample.kk", 0, 1)
 
     /**
+     * 验证一元取负的成功路径和 Long.MIN_VALUE 溢出路径。
+     * Verifies successful unary negation and the Long.MIN_VALUE overflow path.
+     */
+    @Test
+    fun `evaluator covers unary negation success and overflow`() {
+        val success = CoreIrEvaluator().evaluate(
+            IrUnary(operator = IrUnaryOperator.Minus, operand = IrInt64(1, span), span = span),
+        )
+        val overflow = CoreIrEvaluator().evaluate(
+            IrUnary(operator = IrUnaryOperator.Minus, operand = IrInt64(Long.MIN_VALUE, span), span = span),
+        )
+
+        assertEquals(ExecutionValue.Int64(-1), success.value)
+        assertTrue(overflow.hasErrors)
+        assertNull(overflow.value)
+        assertEquals("EXEC003", overflow.diagnostics.single().code)
+    }
+
+    /**
+     * 验证二元加法的成功路径和 Int64 溢出路径。
+     * Verifies successful binary addition and the Int64 overflow path.
+     */
+    @Test
+    fun `evaluator covers addition success and overflow`() {
+        val success = CoreIrEvaluator().evaluate(
+            IrBinary(
+                left = IrInt64(1, span),
+                operator = IrBinaryOperator.Plus,
+                right = IrInt64(2, span),
+                span = span,
+            ),
+        )
+        val overflow = CoreIrEvaluator().evaluate(
+            IrBinary(
+                left = IrInt64(Long.MAX_VALUE, span),
+                operator = IrBinaryOperator.Plus,
+                right = IrInt64(1, span),
+                span = span,
+            ),
+        )
+
+        assertEquals(ExecutionValue.Int64(3), success.value)
+        assertTrue(overflow.hasErrors)
+        assertNull(overflow.value)
+        assertEquals("EXEC003", overflow.diagnostics.single().code)
+    }
+
+    /**
+     * 验证二元减法的成功路径和 Int64 溢出路径。
+     * Verifies successful binary subtraction and the Int64 overflow path.
+     */
+    @Test
+    fun `evaluator covers subtraction success and overflow`() {
+        val success = CoreIrEvaluator().evaluate(
+            IrBinary(
+                left = IrInt64(3, span),
+                operator = IrBinaryOperator.Minus,
+                right = IrInt64(2, span),
+                span = span,
+            ),
+        )
+        val overflow = CoreIrEvaluator().evaluate(
+            IrBinary(
+                left = IrInt64(Long.MIN_VALUE, span),
+                operator = IrBinaryOperator.Minus,
+                right = IrInt64(1, span),
+                span = span,
+            ),
+        )
+
+        assertEquals(ExecutionValue.Int64(1), success.value)
+        assertTrue(overflow.hasErrors)
+        assertNull(overflow.value)
+        assertEquals("EXEC003", overflow.diagnostics.single().code)
+    }
+
+    /**
+     * 验证二元除法的成功、除零和 Int64 溢出路径。
+     * Verifies successful binary division, division by zero, and Int64 overflow paths.
+     */
+    @Test
+    fun `evaluator covers division success division by zero and overflow`() {
+        val success = CoreIrEvaluator().evaluate(
+            IrBinary(
+                left = IrInt64(8, span),
+                operator = IrBinaryOperator.Divide,
+                right = IrInt64(3, span),
+                span = span,
+            ),
+        )
+        val divisionByZero = CoreIrEvaluator().evaluate(
+            IrBinary(
+                left = IrInt64(1, span),
+                operator = IrBinaryOperator.Divide,
+                right = IrInt64(0, span),
+                span = span,
+            ),
+        )
+        val overflow = CoreIrEvaluator().evaluate(
+            IrBinary(
+                left = IrInt64(Long.MIN_VALUE, span),
+                operator = IrBinaryOperator.Divide,
+                right = IrInt64(-1, span),
+                span = span,
+            ),
+        )
+
+        assertEquals(ExecutionValue.Int64(2), success.value)
+        assertTrue(divisionByZero.hasErrors)
+        assertNull(divisionByZero.value)
+        assertEquals("EXEC002", divisionByZero.diagnostics.single().code)
+        assertTrue(overflow.hasErrors)
+        assertNull(overflow.value)
+        assertEquals("EXEC003", overflow.diagnostics.single().code)
+    }
+
+    /**
      * 验证一元表达式 operand 求值失败时外层表达式返回失败。
      * Verifies that an outer unary expression fails when its operand evaluation fails.
      */
