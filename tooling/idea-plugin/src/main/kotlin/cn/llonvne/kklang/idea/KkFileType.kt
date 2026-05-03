@@ -27,8 +27,8 @@ object KkFileType : LanguageFileType(KkLanguage) {
     override fun getDefaultExtension(): String = "kk"
 
     /**
-     * 第一版插件不提供自定义 icon。
-     * The first plugin version does not provide a custom icon.
+     * 返回仓库内 kklang 图标资源。
+     * Returns the in-repository kklang icon resource.
      */
-    override fun getIcon(): Icon? = null
+    override fun getIcon(): Icon = KkIcons.Language
 }

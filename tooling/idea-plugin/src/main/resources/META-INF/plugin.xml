@@ -25,5 +25,8 @@
             implementation="cn.llonvne.kklang.idea.KkRunConfigurationType" />
         <runConfigurationProducer
             implementation="cn.llonvne.kklang.idea.KkRunConfigurationProducer" />
+        <runLineMarkerContributor
+            language="kklang"
+            implementationClass="cn.llonvne.kklang.idea.KkRunLineMarkerContributor" />
     </extensions>
 </idea-plugin>

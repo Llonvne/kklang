@@ -2,7 +2,7 @@ package cn.llonvne.kklang.idea
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
+import kotlin.test.assertNotNull
 import kotlin.test.assertSame
 
 /**
@@ -20,6 +20,7 @@ class KkFileTypeTest {
         assertEquals("kklang source file", KkFileType.description)
         assertEquals("kk", KkFileType.defaultExtension)
         assertSame(KkLanguage, KkFileType.language)
-        assertNull(KkFileType.icon)
+        assertSame(KkIcons.Language, KkFileType.icon)
+        assertNotNull(KkFileType.icon)
     }
 }

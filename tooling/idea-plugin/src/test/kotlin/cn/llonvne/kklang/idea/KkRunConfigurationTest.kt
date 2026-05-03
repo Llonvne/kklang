@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.io.path.ExperimentalPathApi::class)
+
 package cn.llonvne.kklang.idea
 
 import cn.llonvne.kklang.execution.ExecutionValue
@@ -11,11 +13,27 @@ import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.execution.runners.ProgramRunner
 import com.intellij.icons.AllIcons
 import com.intellij.mock.MockProject
+import com.intellij.mock.MockApplication
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.actionSystem.ActionGroup
+import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.openapi.actionSystem.ActionPopupMenu
+import com.intellij.openapi.actionSystem.ActionToolbar
+import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.actionSystem.KeyboardShortcut
+import com.intellij.openapi.actionSystem.TimerListener
+import com.intellij.openapi.actionSystem.ex.AnActionListener
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.extensions.ExtensionPoint
+import com.intellij.openapi.extensions.PluginId
 import com.intellij.openapi.fileTypes.PlainTextFileType
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.roots.ProjectFileIndex
+import com.intellij.openapi.util.ActionCallback
+import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.Ref
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiElement
@@ -27,7 +45,11 @@ import java.lang.reflect.Proxy
 import javax.swing.JTextField
 import sun.misc.Unsafe
 import kotlin.io.path.createTempFile
+import kotlin.io.path.createTempDirectory
+import kotlin.io.path.createDirectories
 import kotlin.io.path.deleteIfExists
+import kotlin.io.path.deleteRecursively
+import kotlin.io.path.pathString
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -35,6 +57,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
@@ -127,8 +150,10 @@ class KkRunConfigurationTest {
             assertEquals("kklang.single.file", KkRunConfigurationType.id)
             assertEquals("kklang.single.file.factory", factory.id)
             assertEquals("kklang", KkRunConfigurationType.displayName)
+            assertSame(KkIcons.Language, KkRunConfigurationType.icon)
             assertEquals(1, KkRunConfigurationType.configurationFactories.size)
             assertSame(factory, producer.configurationFactory)
+            assertIs<DumbAware>(producer)
             assertIs<KkRunConfiguration>(configuration)
         } finally {
             project.dispose()
@@ -206,6 +231,107 @@ class KkRunConfigurationTest {
             assertFalse(producer.isConfigurationFromContext(configuration, configurationContext(project, plainFile)))
         } finally {
             project.dispose()
+        }
+    }
+
+    /**
+     * 验证 run line marker 使用 IDEA 标准 current-file 入口标记 `.kk` 文件。
+     * Verifies that the run line marker marks `.kk` files through IDEA's standard current-file entry.
+     */
+    @Test
+    fun `run line marker exposes standard current file entry for kk files`() {
+        val project = mockProject()
+        val kkFile = psiFile(project, LightVirtualFile("/tmp/main.kk", KkFileType, "1"), KkFileType)
+        val plainFile = psiFile(project, LightVirtualFile("/tmp/main.txt", PlainTextFileType.INSTANCE, "1"), PlainTextFileType.INSTANCE)
+        val anchor = psiElement(project, kkFile, textOffset = 0)
+        val laterElement = psiElement(project, kkFile, textOffset = 1)
+        val missingContainingFile = psiElement(project, null)
+
+        try {
+            withMockApplication {
+                val contributor = KkRunLineMarkerContributor()
+
+                assertIs<DumbAware>(contributor)
+                assertTrue(contributor.producesAllPossibleConfigurations(kkFile))
+                assertFalse(contributor.producesAllPossibleConfigurations(plainFile))
+                val info = assertNotNull(contributor.getInfo(anchor))
+                val fileInfo = assertNotNull(contributor.getInfo(kkFile))
+                assertEquals(AllIcons.RunConfigurations.TestState.Run, info.icon)
+                assertEquals("Run main.kk", info.tooltipProvider.apply(anchor))
+                assertEquals("Run main.kk", fileInfo.tooltipProvider.apply(kkFile))
+                assertNull(contributor.getInfo(laterElement))
+                assertNull(contributor.getInfo(plainFile))
+                assertNull(contributor.getInfo(missingContainingFile))
+            }
+        } finally {
+            project.dispose()
+        }
+    }
+
+    /**
+     * 验证 Native debug command service 从仓库根目录生成 build 和 LLDB 命令。
+     * Verifies that the Native debug command service builds build and LLDB commands from the repository root.
+     */
+    @Test
+    fun `native debug command service builds commands from repo root`() {
+        val root = createTempDirectory()
+        try {
+            root.resolve("settings.gradle.kts").writeText("rootProject.name = \"kklang\"")
+            root.resolve("runtime").resolve("kn").createDirectories()
+            val source = root.resolve("samples").resolve("main.kk")
+            source.parent.createDirectories()
+            source.writeText("1")
+
+            val command = assertIs<KkNativeDebugCommand.Available>(
+                KkNativeDebugCommandService().commandFor(source.pathString),
+            )
+
+            assertEquals(source.toAbsolutePath().normalize().pathString, command.sourceFilePath)
+            assertEquals(root.toAbsolutePath().normalize().pathString, command.repositoryRootPath)
+            assertEquals(
+                root.resolve("runtime/kn/build/bin/host/kkrunDebugExecutable/kkrun.kexe")
+                    .toAbsolutePath()
+                    .normalize()
+                    .pathString,
+                command.executablePath,
+            )
+            assertTrue(command.buildCommand.contains(":runtime:kn:linkKkrunDebugExecutableHost"))
+            assertTrue(command.printCommand.contains(":runtime:kn:printRuntimeSingleFileDebugCommand"))
+            assertTrue(command.lldbCommand.contains("lldb --"))
+            assertTrue(command.consoleText().contains("Native debug executable:"))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    /**
+     * 验证 Native debug command service 在没有完整仓库标记时不生成命令。
+     * Verifies that the Native debug command service does not create commands without complete repository markers.
+     */
+    @Test
+    fun `native debug command service rejects unsupported roots`() {
+        val root = createTempDirectory()
+        val incompleteRoot = createTempDirectory()
+        try {
+            val source = root.resolve("main.kk")
+            source.writeText("1")
+            incompleteRoot.resolve("settings.gradle.kts").writeText("rootProject.name = \"kklang\"")
+            val incompleteSource = incompleteRoot.resolve("main.kk")
+            incompleteSource.writeText("1")
+
+            val unavailable = assertIs<KkNativeDebugCommand.Unavailable>(
+                KkNativeDebugCommandService().commandFor(source.pathString),
+            )
+            assertEquals("", unavailable.consoleText())
+            assertIs<KkNativeDebugCommand.Unavailable>(
+                KkNativeDebugCommandService().commandFor(incompleteSource.pathString),
+            )
+            assertFailsWith<IllegalArgumentException> {
+                KkNativeDebugCommandService().commandFor("")
+            }
+        } finally {
+            root.deleteRecursively()
+            incompleteRoot.deleteRecursively()
         }
     }
 
@@ -298,6 +424,34 @@ class KkRunConfigurationTest {
     }
 
     /**
+     * 验证 run profile state 在仓库内文件运行后追加 Native debug 命令提示。
+     * Verifies that the run profile state appends Native debug command hints after running a file inside the repo.
+     */
+    @Test
+    fun `run profile state appends native debug command for repo files`() {
+        val root = createTempDirectory()
+        val project = mockProject()
+        try {
+            root.resolve("settings.gradle.kts").writeText("rootProject.name = \"kklang\"")
+            root.resolve("runtime").resolve("kn").createDirectories()
+            val kkFile = root.resolve("main.kk")
+            kkFile.writeText("1 + 2")
+            val state = KkRunProfileState(kkFile.pathString)
+            val result = state.execute(TestExecutor, TestRunner)
+            val console = assertIs<KkRunConsole>(result.executionConsole)
+
+            assertTrue(console.text.contains("Result: 3\nProcess finished with exit code 0\n"))
+            assertTrue(console.text.contains("Native debug executable:"))
+            assertTrue(console.text.contains("Native debug build:"))
+            assertTrue(console.text.contains("Native debug LLDB:"))
+            console.dispose()
+        } finally {
+            root.deleteRecursively()
+            project.dispose()
+        }
+    }
+
+    /**
      * 验证 run profile state 在文件缺失时抛出 ExecutionException。
      * Verifies that the run profile state throws ExecutionException when the file is missing.
      */
@@ -343,6 +497,28 @@ class KkRunConfigurationTest {
             java.lang.Byte.TYPE -> 0.toByte()
             else -> null
         }
+
+    /**
+     * 在测试范围内安装最小 IDEA application 和 ActionManager。
+     * Installs a minimal IDEA application and ActionManager for the test scope.
+     */
+    private fun withMockApplication(block: () -> Unit) {
+        val disposable = Disposer.newDisposable()
+        val application = MockApplication(disposable)
+        ApplicationManager.setApplication(application, disposable)
+        application.extensionArea.registerExtensionPoint(
+            Executor.EXECUTOR_EXTENSION_NAME,
+            Executor::class.java.name,
+            ExtensionPoint.Kind.INTERFACE,
+            disposable,
+        )
+        application.registerService(ActionManager::class.java, TestActionManager)
+        try {
+            block()
+        } finally {
+            Disposer.dispose(disposable)
+        }
+    }
 
     /**
      * 在 editor 组件树中查找文本框。
@@ -444,7 +620,7 @@ class KkRunConfigurationTest {
      * 创建测试用 PSI element proxy。
      * Creates a PSI element proxy for tests.
      */
-    private fun psiElement(project: Project, containingFile: PsiFile?): PsiElement =
+    private fun psiElement(project: Project, containingFile: PsiFile?, textOffset: Int = 0): PsiElement =
         Proxy.newProxyInstance(
             PsiElement::class.java.classLoader,
             arrayOf(PsiElement::class.java),
@@ -452,6 +628,7 @@ class KkRunConfigurationTest {
             when (method.name) {
                 "getProject" -> project
                 "getContainingFile" -> containingFile
+                "getTextOffset" -> textOffset
                 "isValid" -> true
                 "toString" -> "test kklang psi element"
                 "hashCode" -> System.identityHashCode(proxy)
@@ -481,6 +658,7 @@ class KkRunConfigurationTest {
                 "getFileType" -> fileType
                 "getVirtualFile" -> virtualFile
                 "getName" -> virtualFile?.name ?: "missing.kk"
+                "getTextOffset" -> 0
                 "isValid" -> true
                 "toString" -> "test kklang psi file"
                 "hashCode" -> System.identityHashCode(proxy)
@@ -529,6 +707,58 @@ class KkRunConfigurationTest {
         override fun getStartActionText(): String = "Run"
         override fun getContextActionId(): String = "RunKk"
         override fun getHelpId(): String? = null
+    }
+
+    /**
+     * 测试用 ActionManager，提供 run line marker action 查询所需的最小动作表面。
+     * Test ActionManager providing the minimal action surface needed by run-line-marker action lookup.
+     */
+    private object TestActionManager : ActionManager() {
+        private val extraActions = DefaultActionGroup()
+
+        override fun createActionPopupMenu(place: String, group: ActionGroup): ActionPopupMenu =
+            throw UnsupportedOperationException("popup menus are not needed in kklang tests")
+
+        override fun createActionToolbar(place: String, group: ActionGroup, horizontal: Boolean): ActionToolbar =
+            throw UnsupportedOperationException("toolbars are not needed in kklang tests")
+
+        override fun getAction(id: String): AnAction = extraActions
+
+        override fun getId(action: AnAction): String = "test-action"
+
+        override fun registerAction(id: String, action: AnAction) = Unit
+
+        override fun registerAction(id: String, action: AnAction, pluginId: PluginId?) = Unit
+
+        override fun unregisterAction(id: String) = Unit
+
+        override fun replaceAction(id: String, action: AnAction) = Unit
+
+        @Deprecated("Overrides deprecated IntelliJ ActionManager API for test compatibility.")
+        override fun getActionIds(prefix: String): Array<String> = emptyArray()
+
+        override fun getActionIdList(prefix: String): List<String> = emptyList()
+
+        override fun isGroup(id: String): Boolean = id == "RunLineMarkerExtraActions"
+
+        override fun getActionOrStub(id: String): AnAction = extraActions
+
+        override fun addTimerListener(listener: TimerListener) = Unit
+
+        override fun removeTimerListener(listener: TimerListener) = Unit
+
+        override fun tryToExecute(
+            action: AnAction,
+            inputEvent: java.awt.event.InputEvent?,
+            contextComponent: java.awt.Component?,
+            place: String?,
+            now: Boolean,
+        ): ActionCallback = ActionCallback.DONE
+
+        @Deprecated("Overrides deprecated IntelliJ ActionManager API for test compatibility.")
+        override fun addAnActionListener(listener: AnActionListener, parentDisposable: Disposable) = Unit
+
+        override fun getKeyboardShortcut(actionId: String): KeyboardShortcut? = null
     }
 
     /**

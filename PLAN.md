@@ -42,11 +42,12 @@ runtime.
 
 ## Current Slice / 当前切片
 
-当前最小语言核心切片已完成；第 4 项已接入 `.kk` 单文件运行配置和当前文件自动生成配置；第 5 项已建立 Native `kkrun` debug executable 和 LLDB 命令，下一步把它收进 IDEA 调试工作流。
+当前最小语言核心切片已完成；第 4 项已接入 `.kk` 单文件运行配置、当前文件自动生成配置和标准 run line marker；第 5 项已建立 Native `kkrun` debug executable、LLDB 命令和 IDEA Run console debug 提示，下一步做真正的 IDE debug 启动入口。
 The current minimal language-core slice is complete; item 4 now has a `.kk`
 single-file run configuration and current-file automatic configuration
-creation; item 5 now has the Native `kkrun` debug executable and LLDB command,
-and the next step is wiring it into the IDEA debugging workflow.
+creation plus a standard run line marker; item 5 now has the Native `kkrun`
+debug executable and LLDB command, plus IDEA Run console debug hints, and the
+next step is a real IDE debug launch entry point.
 
 ## Progress Log / 进度记录
 
@@ -66,6 +67,11 @@ and the next step is wiring it into the IDEA debugging workflow.
   Done: the IDEA plugin automatically creates a single-file run configuration
   from the current `.kk` PSI file context, so the user does not need to fill the
   file path manually.
+- 已完成：IDEA 插件注册标准 `runLineMarkerContributor`，让当前 `.kk` 文件通过 IDEA current-file/gutter run 入口生成同一个单文件运行配置，不写死入口文件名。
+  Done: the IDEA plugin registers the standard `runLineMarkerContributor`, so
+  the current `.kk` file creates the same single-file run configuration through
+  IDEA current-file/gutter run entry points without hard-coding an entry file
+  name.
 - 下一步：建立 Native 可执行文件和 C runtime 调试路径，让 C 代码断点成为可重复工作流。
   Next: add the Native executable and C runtime debug path so C-code breakpoints
   become a repeatable workflow.
@@ -76,3 +82,11 @@ and the next step is wiring it into the IDEA debugging workflow.
 - 下一步：把 Native debug executable 路径暴露给 IDEA 插件/运行配置，使 IDE 内调试入口不需要手工找 kexe。
   Next: expose the Native debug executable path to the IDEA plugin/run
   configuration so IDE debugging does not require manually locating the kexe.
+- 已完成：IDEA 单文件运行配置会在仓库内 `.kk` 文件运行后追加 Native debug executable、Gradle 构建任务、debug 命令任务和 LLDB 命令。
+  Done: the IDEA single-file run configuration appends the Native debug
+  executable, Gradle build task, debug-command task, and LLDB command after
+  running a `.kk` file inside the repository.
+- 下一步：把上述命令升级为 IDEA Debug action 或独立 run configuration executor，直接启动可断 C runtime 的调试会话。
+  Next: upgrade those commands into an IDEA Debug action or dedicated run
+  configuration executor that directly starts a C-runtime-breakpoint-capable
+  debug session.

@@ -15,12 +15,15 @@ import com.intellij.execution.configurations.RunConfigurationBase
 import com.intellij.execution.configurations.RunConfigurationOptions
 import com.intellij.execution.configurations.RunProfileState
 import com.intellij.execution.configurations.RuntimeConfigurationException
+import com.intellij.execution.lineMarker.ExecutorAction
+import com.intellij.execution.lineMarker.RunLineMarkerContributor
 import com.intellij.execution.process.NopProcessHandler
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.execution.runners.ProgramRunner
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.options.SettingsEditor
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.util.Ref
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
@@ -34,6 +37,7 @@ import javax.swing.JPanel
 import javax.swing.JTextArea
 import javax.swing.JTextField
 import kotlin.io.path.name
+import kotlin.io.path.pathString
 import kotlin.io.path.readText
 
 /**
@@ -166,7 +170,7 @@ object KkRunConfigurationType : ConfigurationTypeBase(
     "kklang.single.file",
     "kklang",
     "Run a single .kk file",
-    AllIcons.RunConfigurations.Application,
+    KkIcons.Language,
 ) {
     val configurationFactory: KkRunConfigurationFactory = KkRunConfigurationFactory(this)
 
@@ -198,7 +202,7 @@ class KkRunConfigurationFactory(type: KkRunConfigurationType) : ConfigurationFac
  * 从当前 `.kk` PSI 文件自动生成单文件运行配置。
  * Automatically creates a single-file run configuration from the current `.kk` PSI file.
  */
-class KkRunConfigurationProducer : LazyRunConfigurationProducer<KkRunConfiguration>() {
+class KkRunConfigurationProducer : LazyRunConfigurationProducer<KkRunConfiguration>(), DumbAware {
     /**
      * 返回单文件运行配置工厂。
      * Returns the single-file run configuration factory.
@@ -242,14 +246,22 @@ class KkRunConfigurationProducer : LazyRunConfigurationProducer<KkRunConfigurati
 private fun ConfigurationContext.kkPsiFile(): PsiFile? {
     val location = psiLocation ?: return null
     val file = location.containingFile ?: return null
-    if (file.fileType != KkFileType) {
-        return null
-    }
-    val virtualFile = file.virtualFile ?: return null
-    if (!virtualFile.path.endsWith(".kk")) {
+    if (!file.isSupportedKkFile()) {
         return null
     }
     return file
+}
+
+/**
+ * 判断 PSI 文件是否是当前插件支持的 `.kk` 文件。
+ * Checks whether a PSI file is a `.kk` file supported by the current plugin.
+ */
+private fun PsiFile.isSupportedKkFile(): Boolean {
+    if (fileType != KkFileType) {
+        return false
+    }
+    val virtualFile = virtualFile ?: return false
+    return virtualFile.path.endsWith(".kk")
 }
 
 /**
@@ -258,6 +270,162 @@ private fun ConfigurationContext.kkPsiFile(): PsiFile? {
  */
 private fun String.normalizedPath(): String =
     Path.of(this).normalize().toString()
+
+/**
+ * IDEA 标准 run line marker，为当前 `.kk` 文件暴露 current-file 运行入口。
+ * IDEA standard run line marker exposing the current-file run entry for `.kk` files.
+ */
+class KkRunLineMarkerContributor : RunLineMarkerContributor(), DumbAware {
+    /**
+     * 为 `.kk` 文件的首个 PSI anchor 返回 IDEA 标准 executor actions。
+     * Returns IDEA standard executor actions for the first PSI anchor of a `.kk` file.
+     */
+    override fun getInfo(element: PsiElement): Info? {
+        if (!element.isKkRunMarkerAnchor()) {
+            return null
+        }
+        return Info(
+            AllIcons.RunConfigurations.TestState.Run,
+            ExecutorAction.getActions(0),
+        ) { anchor ->
+            "Run ${Path.of(anchor.containingFile.virtualFile.path).fileName}"
+        }
+    }
+
+    /**
+     * 告诉 IDEA 当前 contributor 已覆盖 `.kk` 文件可生成的单文件配置。
+     * Tells IDEA that this contributor covers the single-file configurations available for `.kk` files.
+     */
+    override fun producesAllPossibleConfigurations(file: PsiFile): Boolean =
+        file.isSupportedKkFile()
+
+    /**
+     * 判断一个 PSI element 是否应该承载 `.kk` 文件的 run marker。
+     * Checks whether a PSI element should carry the `.kk` file run marker.
+     */
+    private fun PsiElement.isKkRunMarkerAnchor(): Boolean {
+        val file = containingFile ?: return false
+        if (!file.isSupportedKkFile()) {
+            return false
+        }
+        return this is PsiFile || textOffset == 0
+    }
+}
+
+/**
+ * IDEA Run console 中暴露的 Native debug 命令。
+ * Native debug command exposed in the IDEA Run console.
+ */
+sealed interface KkNativeDebugCommand {
+    /**
+     * 返回可追加到 Run console 的文本。
+     * Returns text appendable to the Run console.
+     */
+    fun consoleText(): String
+
+    /**
+     * 可用的 Native debug 命令集合。
+     * Available Native debug command set.
+     */
+    data class Available(
+        val sourceFilePath: String,
+        val repositoryRootPath: String,
+        val executablePath: String,
+        val buildCommand: String,
+        val printCommand: String,
+        val lldbCommand: String,
+    ) : KkNativeDebugCommand {
+        /**
+         * 渲染 Native debug executable 和命令提示。
+         * Renders the Native debug executable and command hints.
+         */
+        override fun consoleText(): String =
+            buildString {
+                append('\n')
+                append("Native debug executable: ").append(executablePath).append('\n')
+                append("Native debug build: ").append(buildCommand).append('\n')
+                append("Native debug task: ").append(printCommand).append('\n')
+                append("Native debug LLDB: ").append(lldbCommand).append('\n')
+            }
+    }
+
+    /**
+     * 当前文件无法映射到 kklang 仓库时的空 debug 命令。
+     * Empty debug command used when the current file cannot be mapped to a kklang repository.
+     */
+    data class Unavailable(val reason: String) : KkNativeDebugCommand {
+        /**
+         * 不在 Run console 中显示不可用原因，避免普通临时文件运行产生噪声。
+         * Does not show the unavailable reason in the Run console to avoid noise for temporary files.
+         */
+        override fun consoleText(): String = ""
+    }
+}
+
+/**
+ * 根据 `.kk` 文件路径生成 Native debug executable 和 LLDB 命令。
+ * Generates the Native debug executable and LLDB commands from a `.kk` file path.
+ */
+class KkNativeDebugCommandService {
+    /**
+     * 为指定源码文件生成 Native debug 命令；找不到仓库根目录时返回 unavailable。
+     * Generates Native debug commands for a source file and returns unavailable when no repository root is found.
+     */
+    fun commandFor(sourceFilePath: String): KkNativeDebugCommand {
+        require(sourceFilePath.isNotBlank()) { "source file path must not be blank" }
+        val sourcePath = Path.of(sourceFilePath).toAbsolutePath().normalize()
+        val root = findRepositoryRoot(sourcePath.parent)
+            ?: return KkNativeDebugCommand.Unavailable("Cannot find kklang repository root for $sourceFilePath")
+        val executable = root.resolve("runtime/kn/build/bin/host/kkrunDebugExecutable/kkrun.kexe")
+        val gradlew = root.resolve("gradlew")
+        val buildCommand = "${gradlew.shellText()} :runtime:kn:linkKkrunDebugExecutableHost"
+        val printCommand =
+            "${gradlew.shellText()} :runtime:kn:printRuntimeSingleFileDebugCommand -Pkklang.debug.source=${sourcePath.shellText()}"
+        val lldbCommand = "lldb -- ${executable.shellText()} ${sourcePath.shellText()}"
+
+        return KkNativeDebugCommand.Available(
+            sourceFilePath = sourcePath.pathString,
+            repositoryRootPath = root.pathString,
+            executablePath = executable.pathString,
+            buildCommand = buildCommand,
+            printCommand = printCommand,
+            lldbCommand = lldbCommand,
+        )
+    }
+
+    /**
+     * 自下而上查找 kklang 仓库根目录。
+     * Searches upward for the kklang repository root.
+     */
+    private fun findRepositoryRoot(start: Path?): Path? {
+        var current = start
+        while (current != null) {
+            if (isRepositoryRoot(current)) {
+                return current.toAbsolutePath().normalize()
+            }
+            current = current.parent
+        }
+        return null
+    }
+
+    /**
+     * 判断目录是否具备 kklang 仓库根目录标记。
+     * Checks whether a directory has kklang repository-root markers.
+     */
+    private fun isRepositoryRoot(path: Path): Boolean {
+        if (!Files.isRegularFile(path.resolve("settings.gradle.kts"))) {
+            return false
+        }
+        return Files.isDirectory(path.resolve("runtime/kn"))
+    }
+
+    /**
+     * 返回 shell 命令中可直接使用的单引号路径文本。
+     * Returns single-quoted path text that can be used directly in shell commands.
+     */
+    private fun Path.shellText(): String =
+        "'${pathString.replace("'", "'\"'\"'")}'"
+}
 
 /**
  * kklang 单文件运行配置，保存要执行的 `.kk` 文件路径。
@@ -365,6 +533,7 @@ class KkRunConfigurationEditor : SettingsEditor<KkRunConfiguration>() {
 class KkRunProfileState(
     private val filePath: String,
     private val runService: KkIdeaRunService = KkIdeaRunService(),
+    private val nativeDebugCommandService: KkNativeDebugCommandService = KkNativeDebugCommandService(),
 ) : RunProfileState {
     /**
      * 执行配置并返回 IDEA execution result。
@@ -377,7 +546,8 @@ class KkRunProfileState(
         }
 
         val result = runService.execute(path.name, path.readText())
-        val console = KkRunConsole(result.consoleText())
+        val nativeDebugText = nativeDebugCommandService.commandFor(path.toString()).consoleText()
+        val console = KkRunConsole(result.consoleText() + nativeDebugText)
         val processHandler = KkCompletedProcessHandler()
         processHandler.complete(result.exitCode)
         return DefaultExecutionResult(console, processHandler)

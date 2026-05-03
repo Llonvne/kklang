@@ -16,7 +16,9 @@ class KkPluginDescriptorTest {
     @Test
     fun `plugin descriptor registers kk support`() {
         val descriptor = javaClass.classLoader.getResource("META-INF/plugin.xml")
+        val icon = javaClass.classLoader.getResource("icons/kklang.png")
         assertNotNull(descriptor)
+        assertNotNull(icon)
 
         val text = descriptor.readText()
         assertTrue(text.contains("extensions=\"kk\""))
@@ -26,5 +28,8 @@ class KkPluginDescriptorTest {
         assertTrue(text.contains("cn.llonvne.kklang.idea.KkDiagnosticExternalAnnotator"))
         assertTrue(text.contains("cn.llonvne.kklang.idea.KkRunConfigurationType"))
         assertTrue(text.contains("cn.llonvne.kklang.idea.KkRunConfigurationProducer"))
+        assertTrue(text.contains("cn.llonvne.kklang.idea.KkRunLineMarkerContributor"))
+        assertTrue(text.contains("runLineMarkerContributor"))
+        assertTrue(text.contains("language=\"kklang\""))
     }
 }

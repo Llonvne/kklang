@@ -129,7 +129,10 @@ val toolingLanguageSpec = toolingSpec {
     ideaFeature("syntax-highlighter")
     ideaFeature("minimal-psi")
     ideaFeature("diagnostic-annotator")
+    ideaFeature("idea-icon-assets")
     ideaFeature("single-file-run-configuration")
     ideaFeature("current-file-run-configuration-producer")
+    ideaFeature("current-file-run-line-marker")
+    ideaFeature("native-debug-command-hint")
     ideaFeature("installable-plugin-zip")
 }

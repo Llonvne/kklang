@@ -3,6 +3,17 @@
 本模块生成可安装到本地 IntelliJ IDEA 的 `kklang` 插件。
 This module builds the `kklang` plugin installable into the local IntelliJ IDEA.
 
+## Icon / 图标
+
+项目主图标位于 `assets/kklang-icon.png`，IDEA 插件从 `src/main/resources/icons/kklang.png` 和 `src/main/resources/icons/kklang@2x.png` 打包小尺寸图标。
+The project icon lives at `assets/kklang-icon.png`, and the IDEA plugin packages
+small icon variants from `src/main/resources/icons/kklang.png` and
+`src/main/resources/icons/kklang@2x.png`.
+
+IDEA 中的 `.kk` 文件类型和 `kklang` 单文件运行配置必须引用同一个插件图标资源。
+The `.kk` file type and the `kklang` single-file run configuration in IDEA must
+reference the same plugin icon resource.
+
 ## Build / 构建
 
 默认使用 `/Applications/IntelliJ IDEA.app` 作为编译时 IDEA SDK。
