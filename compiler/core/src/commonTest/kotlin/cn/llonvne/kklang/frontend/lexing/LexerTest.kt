@@ -131,9 +131,39 @@ class LexerTest {
                 TokenKinds.Identifier,
                 TokenKinds.Identifier,
                 TokenKinds.Unknown,
+                TokenKinds.LeftBracket,
                 TokenKinds.Unknown,
-                TokenKinds.Unknown,
-                TokenKinds.Unknown,
+                TokenKinds.LeftBrace,
+                TokenKinds.EndOfFile,
+            ),
+            result.tokens.map { it.kind },
+        )
+    }
+
+    /**
+     * 验证 modifier 和函数语法新增符号会被默认 lexer 识别。
+     * Verifies that modifier and function-syntax punctuation are recognized by the default lexer.
+     */
+    @Test
+    fun `default lexer tokenizes modifier function punctuation`() {
+        val result = Lexer().tokenize(SourceText.of("sample.kk", "modifier fn { [identifier:type?], () }"))
+
+        assertFalse(result.hasErrors)
+        assertEquals(
+            listOf(
+                TokenKinds.Modifier,
+                TokenKinds.Identifier,
+                TokenKinds.LeftBrace,
+                TokenKinds.LeftBracket,
+                TokenKinds.Identifier,
+                TokenKinds.Colon,
+                TokenKinds.Identifier,
+                TokenKinds.Question,
+                TokenKinds.RightBracket,
+                TokenKinds.Comma,
+                TokenKinds.LeftParen,
+                TokenKinds.RightParen,
+                TokenKinds.RightBrace,
                 TokenKinds.EndOfFile,
             ),
             result.tokens.map { it.kind },

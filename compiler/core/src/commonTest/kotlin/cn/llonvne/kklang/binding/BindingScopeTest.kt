@@ -78,4 +78,5 @@ class BindingScopeTest {
             .parseProgramDocument()
             .program
             .declarations
+            .filterIsInstance<ValDeclaration>()
 }

@@ -40,13 +40,14 @@ class CoreIrEvaluator : IrEvaluator {
     override fun evaluate(program: IrProgram): EvaluationResult {
         val diagnostics = DiagnosticBag()
         val environment = mutableMapOf<String, ExecutionValue>()
+        val functions = program.functions.associateBy { it.name }
         val output = StringBuilder()
         for (declaration in program.declarations) {
-            val value = evaluateExpression(declaration.initializer, environment, diagnostics, output)
+            val value = evaluateExpression(declaration.initializer, environment, functions, diagnostics, output)
                 ?: return EvaluationResult(null, diagnostics.toList(), output.toString())
             environment[declaration.name] = value
         }
-        val value = evaluateExpression(program.expression, environment, diagnostics, output)
+        val value = evaluateExpression(program.expression, environment, functions, diagnostics, output)
         return EvaluationResult(value = value, diagnostics = diagnostics.toList(), output = output.toString())
     }
 
@@ -64,16 +65,18 @@ class CoreIrEvaluator : IrEvaluator {
     private fun evaluateExpression(
         expression: IrExpression,
         environment: Map<String, ExecutionValue>,
+        functions: Map<String, IrFunctionDeclaration>,
         diagnostics: DiagnosticBag,
         output: StringBuilder,
     ): ExecutionValue? =
         when (expression) {
             is IrInt64 -> ExecutionValue.Int64(expression.value)
             is IrString -> ExecutionValue.String(expression.value)
-            is IrPrint -> evaluatePrint(expression, environment, diagnostics, output)
+            is IrPrint -> evaluatePrint(expression, environment, functions, diagnostics, output)
+            is IrCall -> evaluateCall(expression, environment, functions, diagnostics, output)
             is IrVariable -> evaluateVariable(expression, environment, diagnostics)
-            is IrUnary -> evaluateUnary(expression, environment, diagnostics, output)
-            is IrBinary -> evaluateBinary(expression, environment, diagnostics, output)
+            is IrUnary -> evaluateUnary(expression, environment, functions, diagnostics, output)
+            is IrBinary -> evaluateBinary(expression, environment, functions, diagnostics, output)
         }
 
     /**
@@ -83,12 +86,48 @@ class CoreIrEvaluator : IrEvaluator {
     private fun evaluatePrint(
         expression: IrPrint,
         environment: Map<String, ExecutionValue>,
+        functions: Map<String, IrFunctionDeclaration>,
         diagnostics: DiagnosticBag,
         output: StringBuilder,
     ): ExecutionValue? {
-        val argument = evaluateExpression(expression.argument, environment, diagnostics, output) ?: return null
+        val argument = evaluateExpression(expression.argument, environment, functions, diagnostics, output) ?: return null
         output.append(argument.printText())
         return ExecutionValue.Unit
+    }
+
+    /**
+     * 求值函数调用，按顺序求值参数并在函数局部环境中求值函数体。
+     * Evaluates a function call by evaluating arguments in order and evaluating the body in a function-local environment.
+     */
+    private fun evaluateCall(
+        expression: IrCall,
+        environment: Map<String, ExecutionValue>,
+        functions: Map<String, IrFunctionDeclaration>,
+        diagnostics: DiagnosticBag,
+        output: StringBuilder,
+    ): ExecutionValue? {
+        val function = functions[expression.callee]
+        if (function == null) {
+            diagnostics.report("EXEC001", "unbound function", expression.span)
+            return null
+        }
+        if (function.parameters.size != expression.arguments.size) {
+            diagnostics.report("EXEC001", "function arity mismatch", expression.span)
+            return null
+        }
+        val argumentValues = expression.arguments.mapNotNull { evaluateExpression(it, environment, functions, diagnostics, output) }
+        if (argumentValues.size != expression.arguments.size) {
+            return null
+        }
+        val localEnvironment = environment.toMutableMap()
+        for ((index, parameter) in function.parameters.withIndex()) {
+            localEnvironment[parameter] = argumentValues[index]
+        }
+        for (declaration in function.body.declarations) {
+            val value = evaluateExpression(declaration.initializer, localEnvironment, functions, diagnostics, output) ?: return null
+            localEnvironment[declaration.name] = value
+        }
+        return evaluateExpression(function.body.expression, localEnvironment, functions, diagnostics, output)
     }
 
     /**
@@ -115,10 +154,11 @@ class CoreIrEvaluator : IrEvaluator {
     private fun evaluateUnary(
         expression: IrUnary,
         environment: Map<String, ExecutionValue>,
+        functions: Map<String, IrFunctionDeclaration>,
         diagnostics: DiagnosticBag,
         output: StringBuilder,
     ): ExecutionValue? {
-        val operand = evaluateExpression(expression.operand, environment, diagnostics, output)?.asInt64(expression, diagnostics) ?: return null
+        val operand = evaluateExpression(expression.operand, environment, functions, diagnostics, output)?.asInt64(expression, diagnostics) ?: return null
         return when (expression.operator) {
             IrUnaryOperator.Plus -> ExecutionValue.Int64(operand)
             IrUnaryOperator.Minus -> negate(expression, operand, diagnostics)
@@ -132,11 +172,12 @@ class CoreIrEvaluator : IrEvaluator {
     private fun evaluateBinary(
         expression: IrBinary,
         environment: Map<String, ExecutionValue>,
+        functions: Map<String, IrFunctionDeclaration>,
         diagnostics: DiagnosticBag,
         output: StringBuilder,
     ): ExecutionValue? {
-        val left = evaluateExpression(expression.left, environment, diagnostics, output)?.asInt64(expression, diagnostics)
-        val right = evaluateExpression(expression.right, environment, diagnostics, output)?.asInt64(expression, diagnostics)
+        val left = evaluateExpression(expression.left, environment, functions, diagnostics, output)?.asInt64(expression, diagnostics)
+        val right = evaluateExpression(expression.right, environment, functions, diagnostics, output)?.asInt64(expression, diagnostics)
         if (left == null || right == null) {
             return null
         }

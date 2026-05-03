@@ -9,14 +9,19 @@ import cn.llonvne.kklang.frontend.SourceSpan
 data class IrProgram(
     val declarations: List<IrValDeclaration>,
     val expression: IrExpression,
+    val functions: List<IrFunctionDeclaration> = emptyList(),
 ) {
     val span: SourceSpan
         get() {
             val firstDeclaration = declarations.firstOrNull()
-            return if (firstDeclaration == null) {
+            if (firstDeclaration != null) {
+                return firstDeclaration.span.covering(expression.span)
+            }
+            val firstFunction = functions.firstOrNull()
+            return if (firstFunction == null) {
                 expression.span
             } else {
-                firstDeclaration.span.covering(expression.span)
+                firstFunction.span.covering(expression.span)
             }
         }
 }
@@ -28,6 +33,17 @@ data class IrProgram(
 data class IrValDeclaration(
     val name: String,
     val initializer: IrExpression,
+    val span: SourceSpan,
+)
+
+/**
+ * Core IR 中的顶层函数声明。
+ * Top-level function declaration in Core IR.
+ */
+data class IrFunctionDeclaration(
+    val name: String,
+    val parameters: List<String>,
+    val body: IrProgram,
     val span: SourceSpan,
 )
 
@@ -72,6 +88,16 @@ data class IrPrint(
  */
 data class IrVariable(
     val name: String,
+    override val span: SourceSpan,
+) : IrExpression
+
+/**
+ * 函数调用的 Core IR 节点。
+ * Core IR node for a function call.
+ */
+data class IrCall(
+    val callee: String,
+    val arguments: List<IrExpression>,
     override val span: SourceSpan,
 ) : IrExpression
 

@@ -61,6 +61,20 @@ class ExecutionEngineTest {
     }
 
     /**
+     * 验证 execution engine 执行由 `fn` modifier expansion 产生的函数。
+     * Verifies that the execution engine runs functions produced by `fn` modifier expansion.
+     */
+    @Test
+    fun `engine executes fn modifier functions`() {
+        val result = ExecutionEngine().execute(
+            SourceText.of("sample.kk", "fn add(a: Int, b: Int) { val c = a + b; c } add(1, 2)"),
+        )
+
+        assertIs<ExecutionResult.Success>(result)
+        assertEquals(ExecutionValue.Int64(3), result.value)
+    }
+
+    /**
      * 验证分组、前缀、除法和零乘法的成功执行路径。
      * Verifies successful execution paths for grouping, prefix operators, division, and multiplication by zero.
      */
@@ -82,7 +96,9 @@ class ExecutionEngineTest {
         assertFailureCodes("@", "LEX001")
         assertFailureCodes("1 +", "PARSE001")
         assertFailureCodes("name", "TYPE001")
+        assertFailureCodes("unknown thing { 1 } 0", "MOD001")
         assertFailureCodes("val x = 1; val x = 2; x", "BIND001")
+        assertFailureCodes("fn add(a: Int) { a } add()", "TYPE005")
     }
 
     /**

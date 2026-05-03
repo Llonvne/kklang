@@ -12,6 +12,8 @@ import cn.llonvne.kklang.frontend.diagnostics.Diagnostic
 import cn.llonvne.kklang.frontend.lexing.Lexer
 import cn.llonvne.kklang.frontend.lexing.Token
 import cn.llonvne.kklang.frontend.parsing.Parser
+import cn.llonvne.kklang.metaprogramming.ModifierExpander
+import cn.llonvne.kklang.metaprogramming.SeedModifierExpander
 import cn.llonvne.kklang.typechecking.SeedTypeChecker
 import cn.llonvne.kklang.typechecking.TypeChecker
 import cn.llonvne.kklang.typechecking.TypeRef
@@ -44,6 +46,7 @@ data class CompiledProgram(
 enum class CompilerPhase {
     Lexing,
     Parsing,
+    ModifierExpansion,
     Binding,
     TypeChecking,
     Lowering,
@@ -84,12 +87,13 @@ sealed interface CompilationResult {
 }
 
 /**
- * 最小编译管线，按 lexing、parsing、binding、type checking、lowering 顺序运行并在诊断出现时短路。
- * Minimal compiler pipeline that runs lexing, parsing, binding, type checking, and lowering in order and short-circuits on diagnostics.
+ * 最小编译管线，按 lexing、parsing、modifier expansion、binding、type checking、lowering 顺序运行并在诊断出现时短路。
+ * Minimal compiler pipeline that runs lexing, parsing, modifier expansion, binding, type checking, and lowering in order and short-circuits on diagnostics.
  */
 class CompilerPipeline(
     private val lexer: Lexer = Lexer(),
     private val parserFactory: (List<Token>) -> Parser = { Parser(it) },
+    private val modifierExpander: ModifierExpander = SeedModifierExpander(),
     private val bindingResolver: BindingResolver = SeedBindingResolver(),
     private val typeChecker: TypeChecker = SeedTypeChecker(),
     private val lowerer: IrLowerer = CoreIrLowerer(),
@@ -113,8 +117,24 @@ class CompilerPipeline(
             return failure(parseResult.diagnostics, phaseTrace)
         }
 
+        phaseTrace += CompilerPhase.ModifierExpansion
+        val expansionResult = modifierExpander.expand(parseResult.program)
+        if (expansionResult.hasErrors) {
+            return failure(expansionResult.diagnostics, phaseTrace)
+        }
+        val expandedProgram = expansionResult.program ?: return failure(
+            listOf(
+                Diagnostic(
+                    code = "COMPILER001",
+                    message = "modifier expansion succeeded without AstProgram",
+                    span = parseResult.program.span,
+                ),
+            ),
+            phaseTrace,
+        )
+
         phaseTrace += CompilerPhase.Binding
-        val bindingResult = bindingResolver.resolve(parseResult.program)
+        val bindingResult = bindingResolver.resolve(expandedProgram)
         if (bindingResult.hasErrors) {
             return failure(bindingResult.diagnostics, phaseTrace)
         }
@@ -124,7 +144,7 @@ class CompilerPipeline(
                 Diagnostic(
                     code = "COMPILER001",
                     message = "binding succeeded without BoundProgram",
-                    span = parseResult.program.span,
+                    span = expandedProgram.span,
                 ),
             ),
             phaseTrace,

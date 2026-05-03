@@ -5,9 +5,9 @@ This spec defines the first minimal type-system skeleton for `kklang`.
 
 ## Current Scope / 当前范围
 
-第一版类型系统只服务现有 seed expression grammar，不新增语言语法。
-The first type system only serves the existing seed expression grammar and does
-not add language syntax.
+第一版类型系统服务现有 seed expression grammar，以及由 `fn` modifier expansion 产生的顶层函数。
+The first type system serves the existing seed expression grammar plus
+top-level functions produced by `fn` modifier expansion.
 
 类型检查阶段位于 binding 和 Core IR lowering 之间。
 The type-checking phase sits between binding and Core IR lowering.
@@ -26,9 +26,9 @@ source expression is semantically valid.
 
 ## Type Model / 类型模型
 
-第一版定义 `TypeRef.Int64`、`TypeRef.String` 和 `TypeRef.Unit`。
-The first version defines `TypeRef.Int64`, `TypeRef.String`, and
-`TypeRef.Unit`.
+第一版定义 `TypeRef.Int64`、`TypeRef.String`、`TypeRef.Unit` 和 `TypeRef.Function`。
+The first version defines `TypeRef.Int64`, `TypeRef.String`, `TypeRef.Unit`,
+and `TypeRef.Function`.
 
 整数 literal、分组表达式、一元整数运算和二元整数运算的类型都是 `TypeRef.Int64`。
 Integer literals, grouped expressions, unary integer operations, and binary
@@ -40,6 +40,21 @@ String literals have type `TypeRef.String`.
 内建 `print(value)` 表达式接受当前所有已定义值类型，并返回 `TypeRef.Unit`。
 The builtin `print(value)` expression accepts every currently defined value
 type and returns `TypeRef.Unit`.
+
+函数参数类型语法允许省略，但第一版可执行函数必须为每个参数显式写出类型。
+Function parameter type syntax may omit the type, but first-version executable
+functions must explicitly write a type for every parameter.
+
+DSL term / DSL 术语：`parameter type syntax is optional`。
+
+`Int` 类型注解映射到当前内部 `TypeRef.Int64`。
+The `Int` type annotation maps to the current internal `TypeRef.Int64`.
+
+函数返回类型从函数体最终 expression 推导，并形成 `TypeRef.Function(parameters, returns)`。
+Function return type is inferred from the function body final expression and
+forms `TypeRef.Function(parameters, returns)`.
+
+DSL term / DSL 术语：`function return type is inferred from body`。
 
 binding 成功的 `val` declaration 会把名字绑定到 initializer 的类型。
 A successfully bound `val` declaration binds its name to the initializer type.
@@ -80,6 +95,8 @@ The first typed AST nodes are:
 | --- | --- |
 | `TypedProgram` | typed program / 已类型检查的程序 |
 | `TypedValDeclaration` | typed immutable val declaration / 已类型检查的不可变 val 声明 |
+| `TypedFunctionDeclaration` | typed top-level function declaration / 已类型检查的顶层函数声明 |
+| `TypedFunctionParameter` | typed function parameter / 已类型检查的函数参数 |
 | `TypedInteger` | typed integer literal / 已类型检查的整数字面量 |
 | `TypedString` | typed string literal / 已类型检查的字符串字面量 |
 | `TypedPrintCall` | typed builtin `print` call / 已类型检查的内建 `print` 调用 |
@@ -87,6 +104,7 @@ The first typed AST nodes are:
 | `TypedGrouped` | typed grouped expression / 已类型检查的分组表达式 |
 | `TypedPrefix` | typed prefix expression / 已类型检查的前缀表达式 |
 | `TypedBinary` | typed binary expression / 已类型检查的二元表达式 |
+| `TypedFunctionCall` | typed function call / 已类型检查的函数调用 |
 
 ## Supported Surface / 支持表面
 
@@ -100,6 +118,8 @@ Currently supported typed source forms:
 | integer literal / 整数字面量 | `TypeRef.Int64` |
 | string literal / 字符串字面量 | `TypeRef.String` |
 | builtin `print(value)` / 内建 `print(value)` | `TypeRef.Unit` |
+| top-level function declaration / 顶层函数声明 | `TypeRef.Function(parameters, returns)` |
+| function call / 函数调用 | function return type / 函数返回类型 |
 | grouped expression / 分组表达式 | inner expression type / 内部表达式类型 |
 | unary `+` / 一元 `+` | `TypeRef.Int64` |
 | unary `-` / 一元 `-` | `TypeRef.Int64` |
@@ -123,7 +143,7 @@ Operators outside the current seed expression grammar must produce `TYPE002`.
 
 未知调用名必须在 binding 阶段产生 `TYPE001`；当前类型系统只接受已经绑定的内建 `print` 调用。
 Unknown call names must produce `TYPE001` during binding; the current type
-system accepts only already-bound builtin `print` calls.
+system accepts already-bound builtin `print` calls and function calls.
 
 ## Diagnostics / 诊断
 
@@ -131,3 +151,7 @@ system accepts only already-bound builtin `print` calls.
 | --- | --- |
 | `TYPE001` | unresolved identifier emitted by binding before type checking / 类型检查前由 binding 发出的未解析标识符 |
 | `TYPE002` | unsupported expression for current type-system scope / 当前类型系统范围不支持的表达式 |
+| `TYPE003` | unknown type annotation / 未知类型注解 |
+| `TYPE004` | missing parameter type for executable function / 可执行函数缺少参数类型 |
+| `TYPE005` | function arity mismatch / 函数参数数量不匹配 |
+| `TYPE006` | function argument type mismatch / 函数参数类型不匹配 |

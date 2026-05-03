@@ -2,6 +2,9 @@ package cn.llonvne.kklang.typechecking
 
 import cn.llonvne.kklang.binding.BoundBinary
 import cn.llonvne.kklang.binding.BoundExpression
+import cn.llonvne.kklang.binding.BoundFunctionBody
+import cn.llonvne.kklang.binding.BoundFunctionCall
+import cn.llonvne.kklang.binding.BoundFunctionDeclaration
 import cn.llonvne.kklang.binding.BoundGrouped
 import cn.llonvne.kklang.binding.BoundInteger
 import cn.llonvne.kklang.binding.BoundMissing
@@ -25,6 +28,7 @@ import cn.llonvne.kklang.frontend.parsing.IntegerExpression
 import cn.llonvne.kklang.frontend.parsing.MissingExpression
 import cn.llonvne.kklang.frontend.parsing.Parser
 import cn.llonvne.kklang.frontend.parsing.PrefixExpression
+import cn.llonvne.kklang.metaprogramming.SeedModifierExpander
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -117,6 +121,41 @@ class TypeCheckerTest {
     }
 
     /**
+     * 验证函数声明推导 Function 类型，函数调用返回函数体类型。
+     * Verifies that function declarations infer Function types and calls return the body type.
+     */
+    @Test
+    fun `type checker infers function declarations and calls`() {
+        val result = checkExpandedProgram("fn add(a: Int, b: Int) { val c = a + b; c } add(1, 2)")
+
+        assertFalse(result.hasErrors)
+        val program = requireNotNull(result.program)
+        val function = program.functions.single()
+        assertEquals("add", function.name)
+        assertEquals(TypeRef.Function(listOf(TypeRef.Int64, TypeRef.Int64), TypeRef.Int64), function.type)
+        assertEquals("call(add, int64, int64)", program.expression.render())
+        assertEquals(TypeRef.Int64, program.type)
+    }
+
+    /**
+     * 验证函数可以返回 String 和 Unit。
+     * Verifies that functions may return String and Unit.
+     */
+    @Test
+    fun `type checker supports string and unit returning functions`() {
+        val stringResult = checkExpandedProgram("fn greet(name: String) { name } greet(\"kk\")")
+        val unitResult = checkExpandedProgram("fn log(value: Int) { print(value) } log(1)")
+        val unitParameterResult = checkExpandedProgram("fn use(value: Unit) { value } use(print(1))")
+
+        assertFalse(stringResult.hasErrors)
+        assertFalse(unitResult.hasErrors)
+        assertFalse(unitParameterResult.hasErrors)
+        assertEquals(TypeRef.String, requireNotNull(stringResult.program).type)
+        assertEquals(TypeRef.Unit, requireNotNull(unitResult.program).type)
+        assertEquals(TypeRef.Unit, requireNotNull(unitParameterResult.program).type)
+    }
+
+    /**
      * 验证 program 便捷入口会先执行 binding 顺序检查。
      * Verifies that the program convenience entry point runs binding order checks first.
      */
@@ -141,6 +180,21 @@ class TypeCheckerTest {
 
         assertTrue(result.hasErrors)
         assertEquals(listOf("BIND001"), result.diagnostics.map { it.code })
+    }
+
+    /**
+     * 验证省略参数类型、未知类型、参数数量和参数类型错误会产生精确 diagnostics。
+     * Verifies precise diagnostics for missing parameter types, unknown types, arity mismatch, and argument type mismatch.
+     */
+    @Test
+    fun `type checker reports function type diagnostics`() {
+        assertExpandedDiagnosticCodes("fn bad(a) { a } bad(1)", "TYPE004")
+        assertExpandedDiagnosticCodes("fn bad(a: Missing) { a } bad(1)", "TYPE003")
+        assertExpandedDiagnosticCodes("fn one(a: Int) { a } one()", "TYPE005")
+        assertExpandedDiagnosticCodes("fn one(a: Int) { a } one(\"x\")", "TYPE006")
+        assertExpandedDiagnosticCodes("fn bad(a: Int) { val x = print(a) + 1; x } 0", "TYPE002", "TYPE001")
+        assertExpandedDiagnosticCodes("val x = 1; x()", "TYPE002")
+        assertExpandedDiagnosticCodes("print()", "TYPE005")
     }
 
     /**
@@ -206,6 +260,54 @@ class TypeCheckerTest {
         assertEquals(listOf("TYPE002"), checkBoundExpression(print).diagnostics.map { it.code })
         assertEquals(listOf("TYPE002"), checkBoundExpression(leftFailure).diagnostics.map { it.code })
         assertEquals(listOf("TYPE002"), checkBoundExpression(rightFailure).diagnostics.map { it.code })
+    }
+
+    /**
+     * 验证 malformed bound function 的 body expression 和 call arguments 失败会传播。
+     * Verifies that failures in malformed bound function body expressions and call arguments propagate.
+     */
+    @Test
+    fun `type checker reports malformed bound function failures`() {
+        val validProgram = boundExpandedProgram("fn id(a: Int) { a } id(1)")
+        val validFunction = validProgram.functions.single()
+        val missing = BoundMissing(MissingExpression(SourceSpan("sample.kk", 0, 0)))
+        val malformedFunction = BoundFunctionDeclaration(
+            syntax = validFunction.syntax,
+            symbol = validFunction.symbol,
+            parameters = validFunction.parameters,
+            body = BoundFunctionBody(declarations = emptyList(), expression = missing),
+        )
+        val malformedCall = BoundFunctionCall(
+            syntax = assertIs<CallExpression>(parse("id(1)")),
+            symbol = validFunction.symbol,
+            arguments = listOf(missing),
+        )
+
+        val bodyFailure = SeedTypeChecker().check(
+            BoundProgram(
+                syntax = validProgram.syntax,
+                declarations = emptyList(),
+                expression = validProgram.expression,
+                symbols = listOf(validFunction.symbol),
+                functions = listOf(malformedFunction),
+                orderedDeclarations = listOf(malformedFunction),
+            ),
+        )
+        val argumentFailure = SeedTypeChecker().check(
+            BoundProgram(
+                syntax = AstProgram(malformedCall.syntax),
+                declarations = emptyList(),
+                expression = malformedCall,
+                symbols = listOf(validFunction.symbol),
+                functions = listOf(validFunction),
+                orderedDeclarations = listOf(validFunction),
+            ),
+        )
+
+        assertTrue(bodyFailure.hasErrors)
+        assertEquals(listOf("TYPE002"), bodyFailure.diagnostics.map { it.code })
+        assertTrue(argumentFailure.hasErrors)
+        assertEquals(listOf("TYPE002"), argumentFailure.diagnostics.map { it.code })
     }
 
     /**
@@ -321,11 +423,25 @@ class TypeCheckerTest {
         SeedTypeChecker().check(parseProgram(text))
 
     /**
+     * 先执行 modifier expansion，再类型检查一个测试 program。
+     * Runs modifier expansion first, then type-checks one test program.
+     */
+    private fun checkExpandedProgram(text: String): ProgramTypeCheckResult =
+        SeedTypeChecker().check(expandProgram(text))
+
+    /**
      * 解析并 binding 一个测试 program。
      * Parses and binds one test program.
      */
     private fun boundProgram(text: String): BoundProgram =
         requireNotNull(SeedBindingResolver().resolve(parseProgram(text)).program)
+
+    /**
+     * 先执行 modifier expansion，再 binding 一个测试 program。
+     * Runs modifier expansion first, then binds one test program.
+     */
+    private fun boundExpandedProgram(text: String): BoundProgram =
+        requireNotNull(SeedBindingResolver().resolve(expandProgram(text)).program)
 
     /**
      * 把单个 bound expression 包装成测试 program 后执行类型检查。
@@ -351,6 +467,24 @@ class TypeCheckerTest {
         Parser(Lexer().tokenize(SourceText.of("sample.kk", text)).tokens)
             .parseProgramDocument()
             .program
+
+    /**
+     * 使用默认 parser 和 modifier expander 构造 expanded AST program。
+     * Builds an expanded AST program with the default parser and modifier expander.
+     */
+    private fun expandProgram(text: String): AstProgram =
+        requireNotNull(SeedModifierExpander().expand(parseProgram(text)).program)
+
+    /**
+     * 断言 expansion 后类型检查失败并产生指定 diagnostics。
+     * Asserts that type checking after expansion fails with the specified diagnostics.
+     */
+    private fun assertExpandedDiagnosticCodes(text: String, vararg codes: String) {
+        val result = checkExpandedProgram(text)
+
+        assertTrue(result.hasErrors)
+        assertEquals(codes.toList(), result.diagnostics.map { it.code })
+    }
 }
 
 /**
@@ -362,6 +496,7 @@ private fun TypedExpression.render(): String =
         is TypedInteger -> "int64"
         is TypedString -> "string(${syntax.text})"
         is TypedPrintCall -> "print(${argument.render()})"
+        is TypedFunctionCall -> "call(${syntax.callee.name}, ${arguments.joinToString { it.render() }})"
         is TypedVariable -> "variable(${syntax.name})"
         is TypedGrouped -> "grouped(${inner.render()})"
         is TypedPrefix -> "prefix(${syntax.operator.lexeme}, ${operand.render()})"

@@ -6,14 +6,30 @@ import cn.llonvne.kklang.frontend.diagnostics.DiagnosticBag
 import cn.llonvne.kklang.frontend.parsing.AstProgram
 import cn.llonvne.kklang.frontend.parsing.BinaryExpression
 import cn.llonvne.kklang.frontend.parsing.CallExpression
+import cn.llonvne.kklang.frontend.parsing.Declaration
 import cn.llonvne.kklang.frontend.parsing.Expression
+import cn.llonvne.kklang.frontend.parsing.FunctionDeclaration
+import cn.llonvne.kklang.frontend.parsing.FunctionParameter
 import cn.llonvne.kklang.frontend.parsing.GroupedExpression
 import cn.llonvne.kklang.frontend.parsing.IdentifierExpression
 import cn.llonvne.kklang.frontend.parsing.IntegerExpression
 import cn.llonvne.kklang.frontend.parsing.MissingExpression
+import cn.llonvne.kklang.frontend.parsing.ModifierDeclaration
 import cn.llonvne.kklang.frontend.parsing.PrefixExpression
+import cn.llonvne.kklang.frontend.parsing.RawModifierApplication
+import cn.llonvne.kklang.frontend.parsing.SymbolSyntax
 import cn.llonvne.kklang.frontend.parsing.StringExpression
 import cn.llonvne.kklang.frontend.parsing.ValDeclaration
+
+/**
+ * binding 符号的来源种类。
+ * Source kind for a binding symbol.
+ */
+enum class BindingSymbolKind {
+    Val,
+    Function,
+    Parameter,
+}
 
 /**
  * binding 阶段创建的不可变符号。
@@ -21,7 +37,8 @@ import cn.llonvne.kklang.frontend.parsing.ValDeclaration
  */
 data class BindingSymbol(
     val name: String,
-    val declaration: ValDeclaration,
+    val declaration: SymbolSyntax,
+    val kind: BindingSymbolKind = BindingSymbolKind.Val,
 )
 
 /**
@@ -30,6 +47,7 @@ data class BindingSymbol(
  */
 class BindingScope private constructor(
     private val symbolsByName: LinkedHashMap<String, BindingSymbol>,
+    private val parent: BindingScope?,
 ) {
     /**
      * 按成功定义顺序返回当前作用域中的符号。
@@ -55,7 +73,14 @@ class BindingScope private constructor(
      * Resolves a symbol already defined in the current scope.
      */
     fun resolve(name: String): BindingSymbol? =
-        symbolsByName[name]
+        symbolsByName[name] ?: parent?.resolve(name)
+
+    /**
+     * 创建以当前 scope 为 parent 的子作用域。
+     * Creates a child scope with this scope as its parent.
+     */
+    fun child(): BindingScope =
+        BindingScope(LinkedHashMap(), this)
 
     /**
      * BindingScope 的工厂入口。
@@ -67,7 +92,7 @@ class BindingScope private constructor(
          * Creates an empty current scope.
          */
         fun empty(): BindingScope =
-            BindingScope(LinkedHashMap())
+            BindingScope(LinkedHashMap(), parent = null)
     }
 }
 
@@ -108,7 +133,25 @@ data class BoundString(
  */
 data class BoundPrintCall(
     override val syntax: CallExpression,
-    val argument: BoundExpression,
+    val arguments: List<BoundExpression>,
+) : BoundExpression {
+    constructor(syntax: CallExpression, argument: BoundExpression) : this(syntax, listOf(argument))
+
+    val argument: BoundExpression
+        get() = arguments.single()
+
+    override val span: SourceSpan
+        get() = syntax.span
+}
+
+/**
+ * binding 后的函数调用，携带解析到的函数符号和已绑定参数。
+ * Bound function call carrying the resolved function symbol and bound arguments.
+ */
+data class BoundFunctionCall(
+    override val syntax: CallExpression,
+    val symbol: BindingSymbol,
+    val arguments: List<BoundExpression>,
 ) : BoundExpression {
     override val span: SourceSpan
         get() = syntax.span
@@ -175,6 +218,14 @@ data class BoundMissing(
 }
 
 /**
+ * binding 后 declaration 的共同接口。
+ * Shared interface for declarations after binding.
+ */
+sealed interface BoundDeclaration {
+    val name: String
+}
+
+/**
  * binding 后的不可变 val declaration。
  * Immutable val declaration after binding.
  */
@@ -182,8 +233,43 @@ data class BoundValDeclaration(
     val syntax: ValDeclaration,
     val symbol: BindingSymbol,
     val initializer: BoundExpression,
+) : BoundDeclaration {
+    override val name: String
+        get() = symbol.name
+}
+
+/**
+ * binding 后的函数参数。
+ * Function parameter after binding.
+ */
+data class BoundFunctionParameter(
+    val syntax: FunctionParameter,
+    val symbol: BindingSymbol,
 ) {
     val name: String
+        get() = symbol.name
+}
+
+/**
+ * binding 后的函数体。
+ * Function body after binding.
+ */
+data class BoundFunctionBody(
+    val declarations: List<BoundValDeclaration>,
+    val expression: BoundExpression,
+)
+
+/**
+ * binding 后的顶层函数声明。
+ * Top-level function declaration after binding.
+ */
+data class BoundFunctionDeclaration(
+    val syntax: FunctionDeclaration,
+    val symbol: BindingSymbol,
+    val parameters: List<BoundFunctionParameter>,
+    val body: BoundFunctionBody,
+) : BoundDeclaration {
+    override val name: String
         get() = symbol.name
 }
 
@@ -196,6 +282,8 @@ data class BoundProgram(
     val declarations: List<BoundValDeclaration>,
     val expression: BoundExpression,
     val symbols: List<BindingSymbol>,
+    val functions: List<BoundFunctionDeclaration> = emptyList(),
+    val orderedDeclarations: List<BoundDeclaration> = declarations + functions,
 ) {
     val span: SourceSpan
         get() = syntax.span
@@ -226,29 +314,34 @@ fun interface BindingResolver {
 }
 
 /**
- * 当前最小 binding resolver，支持单一 program scope 和不可变 val。
- * Current minimal binding resolver supporting one program scope and immutable vals.
+ * 当前最小 binding resolver，支持 program scope、不可变 val 和顺序绑定函数。
+ * Current minimal binding resolver supporting a program scope, immutable vals, and source-ordered functions.
  */
 class SeedBindingResolver : BindingResolver {
     /**
-     * 解析 program 的 val 声明顺序、重复声明和 identifier 引用。
-     * Resolves val declaration order, duplicate declarations, and identifier references in a program.
+     * 解析 program 的声明顺序、重复声明和 identifier 引用。
+     * Resolves declaration order, duplicate declarations, and identifier references in a program.
      */
     override fun resolve(program: AstProgram): BindingResult {
         val diagnostics = DiagnosticBag()
         val scope = BindingScope.empty()
         val boundDeclarations = mutableListOf<BoundValDeclaration>()
+        val boundFunctions = mutableListOf<BoundFunctionDeclaration>()
+        val orderedDeclarations = mutableListOf<BoundDeclaration>()
 
         for (declaration in program.declarations) {
-            val duplicate = scope.resolve(declaration.name) != null
-            val initializer = bindExpression(declaration.initializer, scope, diagnostics)
-            if (duplicate) {
-                diagnostics.report("BIND001", "duplicate immutable value", declaration.nameToken.span)
-            }
-            if (!duplicate && initializer != null) {
-                val symbol = BindingSymbol(name = declaration.name, declaration = declaration)
-                scope.define(symbol)
-                boundDeclarations += BoundValDeclaration(syntax = declaration, symbol = symbol, initializer = initializer)
+            when (declaration) {
+                is ValDeclaration -> bindValDeclaration(declaration, scope, diagnostics)?.let {
+                    boundDeclarations += it
+                    orderedDeclarations += it
+                }
+                is FunctionDeclaration -> bindFunctionDeclaration(declaration, scope, diagnostics)?.let {
+                    boundFunctions += it
+                    orderedDeclarations += it
+                }
+                is ModifierDeclaration,
+                is RawModifierApplication,
+                -> diagnostics.report("BIND001", "unexpanded modifier declaration", declaration.span)
             }
         }
 
@@ -264,9 +357,87 @@ class SeedBindingResolver : BindingResolver {
                 declarations = boundDeclarations.toList(),
                 expression = expression!!,
                 symbols = scope.symbols,
+                functions = boundFunctions.toList(),
+                orderedDeclarations = orderedDeclarations.toList(),
             ),
             diagnostics = diagnosticsList,
         )
+    }
+
+    /**
+     * binding 一个 val declaration，并在成功后写入当前 scope。
+     * Binds one val declaration and writes it into the current scope on success.
+     */
+    private fun bindValDeclaration(
+        declaration: ValDeclaration,
+        scope: BindingScope,
+        diagnostics: DiagnosticBag,
+    ): BoundValDeclaration? {
+        val duplicate = scope.resolve(declaration.name) != null
+        val initializer = bindExpression(declaration.initializer, scope, diagnostics)
+        if (duplicate) {
+            diagnostics.report("BIND001", "duplicate immutable value", declaration.nameToken.span)
+        }
+        if (duplicate || initializer == null) {
+            return null
+        }
+        val symbol = BindingSymbol(name = declaration.name, declaration = declaration, kind = BindingSymbolKind.Val)
+        scope.define(symbol)
+        return BoundValDeclaration(syntax = declaration, symbol = symbol, initializer = initializer)
+    }
+
+    /**
+     * binding 一个函数声明；函数体在函数名进入 scope 之前解析，因此禁止递归。
+     * Binds one function declaration; the body is resolved before the function name enters scope, which forbids recursion.
+     */
+    private fun bindFunctionDeclaration(
+        declaration: FunctionDeclaration,
+        scope: BindingScope,
+        diagnostics: DiagnosticBag,
+    ): BoundFunctionDeclaration? {
+        val duplicate = scope.resolve(declaration.name) != null
+        val functionScope = scope.child()
+        val parameters = bindParameters(declaration.parameters, functionScope, diagnostics)
+        val bodyDeclarations = mutableListOf<BoundValDeclaration>()
+        for (localDeclaration in declaration.body.declarations) {
+            bindValDeclaration(localDeclaration, functionScope, diagnostics)?.let(bodyDeclarations::add)
+        }
+        val bodyExpression = bindExpression(declaration.body.expression, functionScope, diagnostics)
+        if (duplicate) {
+            diagnostics.report("BIND001", "duplicate function", declaration.nameToken.span)
+        }
+        if (duplicate || bodyExpression == null || diagnostics.toList().isNotEmpty()) {
+            return null
+        }
+        val symbol = BindingSymbol(name = declaration.name, declaration = declaration, kind = BindingSymbolKind.Function)
+        scope.define(symbol)
+        return BoundFunctionDeclaration(
+            syntax = declaration,
+            symbol = symbol,
+            parameters = parameters,
+            body = BoundFunctionBody(declarations = bodyDeclarations.toList(), expression = bodyExpression),
+        )
+    }
+
+    /**
+     * binding 函数参数并检测同一参数列表中的重复名字。
+     * Binds function parameters and detects duplicate names in the same parameter list.
+     */
+    private fun bindParameters(
+        parameters: List<FunctionParameter>,
+        scope: BindingScope,
+        diagnostics: DiagnosticBag,
+    ): List<BoundFunctionParameter> {
+        val boundParameters = mutableListOf<BoundFunctionParameter>()
+        for (parameter in parameters) {
+            val symbol = BindingSymbol(name = parameter.name, declaration = parameter, kind = BindingSymbolKind.Parameter)
+            if (!scope.define(symbol)) {
+                diagnostics.report("BIND001", "duplicate function parameter", parameter.nameToken.span)
+            } else {
+                boundParameters += BoundFunctionParameter(syntax = parameter, symbol = symbol)
+            }
+        }
+        return boundParameters.toList()
     }
 
     /**
@@ -294,20 +465,27 @@ class SeedBindingResolver : BindingResolver {
         }
 
     /**
-     * binding 当前唯一的内建调用 `print(argument)`，未知调用名仍报告 TYPE001。
-     * Binds the current only builtin call `print(argument)` and reports TYPE001 for unknown call names.
+     * binding 内建 `print(argument)` 或已解析函数调用。
+     * Binds builtin `print(argument)` or a resolved function call.
      */
     private fun bindCall(
         expression: CallExpression,
         scope: BindingScope,
         diagnostics: DiagnosticBag,
     ): BoundExpression? {
-        val argument = bindExpression(expression.argument, scope, diagnostics)
-        if (expression.callee.name != "print") {
+        val arguments = expression.arguments.mapNotNull { bindExpression(it, scope, diagnostics) }
+        if (arguments.size != expression.arguments.size) {
+            return null
+        }
+        if (expression.callee.name == "print") {
+            return BoundPrintCall(expression, arguments)
+        }
+        val symbol = scope.resolve(expression.callee.name)
+        if (symbol == null) {
             diagnostics.report("TYPE001", "unresolved identifier", expression.callee.span)
             return null
         }
-        return if (argument == null) null else BoundPrintCall(expression, argument)
+        return BoundFunctionCall(syntax = expression, symbol = symbol, arguments = arguments)
     }
 
     /**

@@ -18,7 +18,7 @@ class CompilerPipelineSpecTest {
     @Test
     fun `compiler pipeline spec records phase order and result surface`() {
         assertEquals(
-            listOf("lexing", "parsing", "binding", "type checking", "lowering"),
+            listOf("lexing", "parsing", "modifier expansion", "binding", "type checking", "lowering"),
             minimalCompilerPipelineSpec.phases,
         )
         assertEquals(
@@ -36,7 +36,8 @@ class CompilerPipelineSpecTest {
         assertEquals(
             listOf(
                 "lexer diagnostics stop before parsing",
-                "parser diagnostics stop before binding",
+                "parser diagnostics stop before modifier expansion",
+                "modifier diagnostics stop before binding",
                 "binding diagnostics stop before type checking",
                 "type checker diagnostics stop before lowering",
                 "lowering diagnostics stop before execution",

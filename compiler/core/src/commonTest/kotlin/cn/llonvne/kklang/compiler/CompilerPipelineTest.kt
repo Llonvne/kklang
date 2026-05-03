@@ -18,6 +18,8 @@ import cn.llonvne.kklang.frontend.SourceSpan
 import cn.llonvne.kklang.frontend.SourceText
 import cn.llonvne.kklang.frontend.diagnostics.Diagnostic
 import cn.llonvne.kklang.frontend.parsing.Parser
+import cn.llonvne.kklang.metaprogramming.ModifierExpander
+import cn.llonvne.kklang.metaprogramming.ModifierExpansionResult
 import cn.llonvne.kklang.typechecking.ProgramTypeCheckResult
 import cn.llonvne.kklang.typechecking.TypeChecker
 import cn.llonvne.kklang.typechecking.TypeRef
@@ -45,6 +47,7 @@ class CompilerPipelineTest {
             listOf(
                 CompilerPhase.Lexing,
                 CompilerPhase.Parsing,
+                CompilerPhase.ModifierExpansion,
                 CompilerPhase.Binding,
                 CompilerPhase.TypeChecking,
                 CompilerPhase.Lowering,
@@ -69,6 +72,32 @@ class CompilerPipelineTest {
         assertEquals(TypeRef.Int64, result.program.type)
         assertEquals(SourceSpan("sample.kk", 0, 16), result.program.span)
         assertEquals(result.program.ir.expression, result.program.expression)
+    }
+
+    /**
+     * 验证 compiler pipeline 会通过 modifier expansion 编译函数声明和调用。
+     * Verifies that the compiler pipeline compiles function declarations and calls through modifier expansion.
+     */
+    @Test
+    fun `pipeline compiles fn modifier function program`() {
+        val result = CompilerPipeline().compile(
+            CompilationInput(SourceText.of("sample.kk", "fn add(a: Int, b: Int) { a + b } add(1, 2)")),
+        )
+
+        assertIs<CompilationResult.Success>(result)
+        assertEquals(TypeRef.Int64, result.program.type)
+        assertEquals(listOf("add"), result.program.ir.functions.map { it.name })
+        assertEquals(
+            listOf(
+                CompilerPhase.Lexing,
+                CompilerPhase.Parsing,
+                CompilerPhase.ModifierExpansion,
+                CompilerPhase.Binding,
+                CompilerPhase.TypeChecking,
+                CompilerPhase.Lowering,
+            ),
+            result.phaseTrace,
+        )
     }
 
     /**
@@ -109,18 +138,23 @@ class CompilerPipelineTest {
     }
 
     /**
-     * 验证 parsing diagnostics 会阻止 binding、type checker 和 lowering 运行。
-     * Verifies that parsing diagnostics prevent binding, the type checker, and lowering from running.
+     * 验证 parsing diagnostics 会阻止 modifier expansion、binding、type checker 和 lowering 运行。
+     * Verifies that parsing diagnostics prevent modifier expansion, binding, the type checker, and lowering from running.
      */
     @Test
     fun `pipeline stops before type checking when parsing fails`() {
         var bindingResolverWasCalled = false
+        var modifierExpanderWasCalled = false
         var typeCheckerWasCalled = false
         var lowererWasCalled = false
         val result = CompilerPipeline(
             bindingResolver = BindingResolver {
                 bindingResolverWasCalled = true
                 BindingResult(null, emptyList())
+            },
+            modifierExpander = ModifierExpander {
+                modifierExpanderWasCalled = true
+                ModifierExpansionResult(it, emptyList())
             },
             typeChecker = TypeChecker {
                 typeCheckerWasCalled = true
@@ -138,9 +172,45 @@ class CompilerPipelineTest {
         assertIs<CompilationResult.Failure>(result)
         assertEquals(listOf(CompilerPhase.Lexing, CompilerPhase.Parsing), result.phaseTrace)
         assertEquals(listOf("PARSE001"), result.diagnostics.map { it.code })
+        assertFalse(modifierExpanderWasCalled)
         assertFalse(bindingResolverWasCalled)
         assertFalse(typeCheckerWasCalled)
         assertFalse(lowererWasCalled)
+    }
+
+    /**
+     * 验证 modifier expansion diagnostics 会阻止 binding 和后续阶段。
+     * Verifies that modifier expansion diagnostics prevent binding and later phases.
+     */
+    @Test
+    fun `pipeline stops before binding when modifier expansion fails`() {
+        var bindingResolverWasCalled = false
+        val result = CompilerPipeline(
+            bindingResolver = BindingResolver {
+                bindingResolverWasCalled = true
+                BindingResult(null, emptyList())
+            },
+        ).compile(CompilationInput(SourceText.of("sample.kk", "unknown thing { 1 } 0")))
+
+        assertIs<CompilationResult.Failure>(result)
+        assertEquals(listOf(CompilerPhase.Lexing, CompilerPhase.Parsing, CompilerPhase.ModifierExpansion), result.phaseTrace)
+        assertEquals(listOf("MOD001"), result.diagnostics.map { it.code })
+        assertFalse(bindingResolverWasCalled)
+    }
+
+    /**
+     * 验证 modifier expander 违反内部契约时会被转换为 COMPILER001。
+     * Verifies that a modifier-expander contract violation is converted into COMPILER001.
+     */
+    @Test
+    fun `pipeline rejects modifier expansion success without ast program`() {
+        val result = CompilerPipeline(
+            modifierExpander = ModifierExpander { ModifierExpansionResult(program = null, diagnostics = emptyList()) },
+        ).compile(CompilationInput(SourceText.of("sample.kk", "1")))
+
+        assertIs<CompilationResult.Failure>(result)
+        assertEquals(listOf("COMPILER001"), result.diagnostics.map { it.code })
+        assertEquals(listOf(CompilerPhase.Lexing, CompilerPhase.Parsing, CompilerPhase.ModifierExpansion), result.phaseTrace)
     }
 
     /**
@@ -166,7 +236,7 @@ class CompilerPipelineTest {
         ).compile(CompilationInput(SourceText.of("sample.kk", "name")))
 
         assertIs<CompilationResult.Failure>(result)
-        assertEquals(listOf(CompilerPhase.Lexing, CompilerPhase.Parsing, CompilerPhase.Binding), result.phaseTrace)
+        assertEquals(listOf(CompilerPhase.Lexing, CompilerPhase.Parsing, CompilerPhase.ModifierExpansion, CompilerPhase.Binding), result.phaseTrace)
         assertEquals(listOf("TYPE001"), result.diagnostics.map { it.code })
         assertFalse(typeCheckerWasCalled)
         assertFalse(lowererWasCalled)
@@ -198,7 +268,7 @@ class CompilerPipelineTest {
 
         assertIs<CompilationResult.Failure>(result)
         assertEquals(
-            listOf(CompilerPhase.Lexing, CompilerPhase.Parsing, CompilerPhase.Binding, CompilerPhase.TypeChecking),
+            listOf(CompilerPhase.Lexing, CompilerPhase.Parsing, CompilerPhase.ModifierExpansion, CompilerPhase.Binding, CompilerPhase.TypeChecking),
             result.phaseTrace,
         )
         assertEquals(listOf("TYPE002"), result.diagnostics.map { it.code })
@@ -226,6 +296,7 @@ class CompilerPipelineTest {
             listOf(
                 CompilerPhase.Lexing,
                 CompilerPhase.Parsing,
+                CompilerPhase.ModifierExpansion,
                 CompilerPhase.Binding,
                 CompilerPhase.TypeChecking,
                 CompilerPhase.Lowering,
@@ -247,7 +318,7 @@ class CompilerPipelineTest {
 
         assertIs<CompilationResult.Failure>(result)
         assertEquals(listOf("COMPILER001"), result.diagnostics.map { it.code })
-        assertEquals(listOf(CompilerPhase.Lexing, CompilerPhase.Parsing, CompilerPhase.Binding), result.phaseTrace)
+        assertEquals(listOf(CompilerPhase.Lexing, CompilerPhase.Parsing, CompilerPhase.ModifierExpansion, CompilerPhase.Binding), result.phaseTrace)
     }
 
     /**

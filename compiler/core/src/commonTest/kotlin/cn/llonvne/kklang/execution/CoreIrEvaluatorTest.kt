@@ -3,6 +3,7 @@ package cn.llonvne.kklang.execution
 import cn.llonvne.kklang.frontend.SourceSpan
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -38,6 +39,7 @@ class CoreIrEvaluatorTest {
 
         val result = CoreIrEvaluator().evaluate(program)
 
+        assertFalse(result.hasErrors)
         assertEquals(ExecutionValue.Int64(3), result.value)
     }
 
@@ -78,6 +80,65 @@ class CoreIrEvaluatorTest {
     }
 
     /**
+     * 验证 evaluator 执行函数调用并为函数体创建参数和局部 val 作用域。
+     * Verifies that the evaluator executes function calls and creates parameter plus local val scope for the function body.
+     */
+    @Test
+    fun `evaluator evaluates function calls`() {
+        val function = IrFunctionDeclaration(
+            name = "add",
+            parameters = listOf("a", "b"),
+            body = IrProgram(
+                declarations = listOf(
+                    IrValDeclaration(
+                        name = "c",
+                        initializer = IrBinary(IrVariable("a", span), IrBinaryOperator.Plus, IrVariable("b", span), span),
+                        span = span,
+                    ),
+                ),
+                expression = IrVariable("c", span),
+            ),
+            span = span,
+        )
+        val program = IrProgram(
+            declarations = emptyList(),
+            expression = IrCall("add", listOf(IrInt64(1, span), IrInt64(2, span)), span),
+            functions = listOf(function),
+        )
+
+        val result = CoreIrEvaluator().evaluate(program)
+
+        assertEquals(ExecutionValue.Int64(3), result.value)
+    }
+
+    /**
+     * 验证函数调用会保留 top-level val 和 print 输出。
+     * Verifies that function calls preserve top-level vals and print output.
+     */
+    @Test
+    fun `evaluator function calls can read top level vals and preserve output`() {
+        val function = IrFunctionDeclaration(
+            name = "show",
+            parameters = listOf("value"),
+            body = IrProgram(
+                declarations = emptyList(),
+                expression = IrPrint(IrBinary(IrVariable("base", span), IrBinaryOperator.Plus, IrVariable("value", span), span), span),
+            ),
+            span = span,
+        )
+        val program = IrProgram(
+            declarations = listOf(IrValDeclaration("base", IrInt64(40, span), span)),
+            expression = IrCall("show", listOf(IrInt64(2, span)), span),
+            functions = listOf(function),
+        )
+
+        val result = CoreIrEvaluator().evaluate(program)
+
+        assertEquals(ExecutionValue.Unit, result.value)
+        assertEquals("42", result.output)
+    }
+
+    /**
      * 验证 print 使用 Int64 的十进制文本形式。
      * Verifies that print uses the decimal text form for Int64.
      */
@@ -109,6 +170,58 @@ class CoreIrEvaluatorTest {
         assertTrue(declarationFailure.hasErrors)
         assertNull(declarationFailure.value)
         assertEquals("EXEC001", declarationFailure.diagnostics.single().code)
+    }
+
+    /**
+     * 验证 malformed IR 中未知函数和参数数量错误会产生 EXEC001。
+     * Verifies that unknown functions and arity mismatches in malformed IR produce EXEC001.
+     */
+    @Test
+    fun `evaluator reports malformed function calls`() {
+        val unknown = CoreIrEvaluator().evaluate(IrProgram(emptyList(), IrCall("missing", emptyList(), span)))
+        val arity = CoreIrEvaluator().evaluate(
+            IrProgram(
+                declarations = emptyList(),
+                expression = IrCall("one", emptyList(), span),
+                functions = listOf(IrFunctionDeclaration("one", listOf("x"), IrProgram(emptyList(), IrVariable("x", span)), span)),
+            ),
+        )
+
+        assertTrue(unknown.hasErrors)
+        assertNull(unknown.value)
+        assertEquals("EXEC001", unknown.diagnostics.single().code)
+        assertTrue(arity.hasErrors)
+        assertNull(arity.value)
+        assertEquals("EXEC001", arity.diagnostics.single().code)
+    }
+
+    /**
+     * 验证函数调用 argument 或局部 declaration 求值失败时会直接失败。
+     * Verifies that function calls fail immediately when an argument or local declaration evaluation fails.
+     */
+    @Test
+    fun `evaluator reports function argument and local declaration failures`() {
+        val identity = IrFunctionDeclaration("id", listOf("x"), IrProgram(emptyList(), IrVariable("x", span)), span)
+        val localFailure = IrFunctionDeclaration(
+            name = "bad",
+            parameters = emptyList(),
+            body = IrProgram(
+                declarations = listOf(IrValDeclaration("x", IrVariable("missing", span), span)),
+                expression = IrInt64(1, span),
+            ),
+            span = span,
+        )
+        val argument = CoreIrEvaluator().evaluate(
+            IrProgram(emptyList(), IrCall("id", listOf(IrVariable("missing", span)), span), functions = listOf(identity)),
+        )
+        val local = CoreIrEvaluator().evaluate(
+            IrProgram(emptyList(), IrCall("bad", emptyList(), span), functions = listOf(localFailure)),
+        )
+
+        assertTrue(argument.hasErrors)
+        assertEquals("EXEC001", argument.diagnostics.single().code)
+        assertTrue(local.hasErrors)
+        assertEquals("EXEC001", local.diagnostics.single().code)
     }
 
     /**

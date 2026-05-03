@@ -7,10 +7,12 @@ import cn.llonvne.kklang.frontend.lexing.LexerConfig
 import cn.llonvne.kklang.frontend.lexing.LexerRule
 import cn.llonvne.kklang.frontend.lexing.TokenKind
 import cn.llonvne.kklang.frontend.lexing.TokenKinds
+import cn.llonvne.kklang.metaprogramming.SeedModifierExpander
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
@@ -52,6 +54,21 @@ class ParserTest {
 
         assertFalse(result.hasErrors)
         assertEquals("(* (- call(print, (+ int(1) int(2)))) int(3))", result.expression.render())
+    }
+
+    /**
+     * 验证 parser 支持空参数和多参数调用表达式。
+     * Verifies that the parser supports empty-argument and multi-argument call expressions.
+     */
+    @Test
+    fun `parser handles empty and multiple call arguments`() {
+        val empty = parse("answer()")
+        val multiple = parse("add(1, 2 + 3)")
+
+        assertFalse(empty.hasErrors)
+        assertFalse(multiple.hasErrors)
+        assertEquals("call(answer)", empty.expression.render())
+        assertEquals("call(add, int(1), (+ int(2) int(3)))", multiple.expression.render())
     }
 
     /**
@@ -98,6 +115,94 @@ class ParserTest {
 
         assertFalse(result.hasErrors)
         assertEquals("program(val x = int(1); val y = (+ id(x) int(2)); (* id(y) int(3)))", result.program.render())
+    }
+
+    /**
+     * 验证 program parser 把 modifier declaration 和 identifier block declaration 保留为 raw 声明。
+     * Verifies that the program parser preserves modifier declarations and identifier block declarations as raw declarations.
+     */
+    @Test
+    fun `program parser preserves modifier declarations and raw modifier applications`() {
+        val text = "modifier fn { [modifiers] fn [identifier]([identifier:type?]) { [body] } } fn add(a: Int) { a } add(1)"
+        val result = parseProgram(text)
+
+        assertFalse(result.hasErrors)
+        assertEquals(
+            "program(modifier fn; raw fn; call(add, int(1)))",
+            result.program.render(),
+        )
+    }
+
+    /**
+     * 验证 modifier 和 raw declaration 的 span 覆盖完整源码结构。
+     * Verifies that modifier and raw declaration spans cover the complete source structures.
+     */
+    @Test
+    fun `program parser exposes modifier declaration spans`() {
+        val result = parseProgram("modifier fn { { nested } } fn id() { 1 } id()")
+
+        assertFalse(result.hasErrors)
+        val modifier = assertIs<ModifierDeclaration>(result.program.declarations[0])
+        val raw = assertIs<RawModifierApplication>(result.program.declarations[1])
+        assertEquals(SourceSpan("sample.kk", 0, 26), modifier.span)
+        assertEquals(SourceSpan("sample.kk", 27, 40), raw.span)
+    }
+
+    /**
+     * 验证缺失 modifier 右大括号会产生 PARSE003，并验证括号内 block 不会被误判为 raw declaration。
+     * Verifies that a missing modifier right brace produces PARSE003 and that a block inside parentheses is not mistaken for a raw declaration.
+     */
+    @Test
+    fun `program parser reports malformed modifier declarations and ignores parenthesized blocks`() {
+        val missingBrace = parseProgram("modifier fn { [body] 0")
+        val parenthesizedBlock = parseProgram("name({ 1 })")
+        val semicolonLookahead = parseProgram("name;")
+        val unmatchedRightParenLookahead = parseProgram("name ) { 1 } 0")
+        val unmatchedRightBraceRaw = parseProgram("decorated } { 1 } 0")
+        val missingRawBrace = parseProgram("fn id() { 1")
+
+        assertTrue(missingBrace.hasErrors)
+        assertEquals(listOf("PARSE003", "PARSE001"), missingBrace.diagnostics.map { it.code })
+        assertTrue(parenthesizedBlock.hasErrors)
+        assertEquals(emptyList(), parenthesizedBlock.program.declarations)
+        assertTrue(parenthesizedBlock.diagnostics.map { it.code }.contains("PARSE001"))
+        assertEquals(listOf("PARSE002"), semicolonLookahead.diagnostics.map { it.code })
+        assertFalse(unmatchedRightParenLookahead.hasErrors)
+        assertEquals("raw name;", unmatchedRightParenLookahead.program.declarations.single().render())
+        assertTrue(unmatchedRightBraceRaw.hasErrors)
+        assertEquals("raw decorated;", unmatchedRightBraceRaw.program.declarations.single().render())
+        assertTrue(missingRawBrace.hasErrors)
+        assertEquals("raw fn;", missingRawBrace.program.declarations.single().render())
+    }
+
+    /**
+     * 验证函数参数、函数体和单参数 call 的兼容属性。
+     * Verifies compatibility properties for function parameters, function bodies, and single-argument calls.
+     */
+    @Test
+    fun `ast compatibility properties expose spans and single call argument`() {
+        val call = assertIs<CallExpression>(parse("print(1)").expression)
+        val compatibilityCall = CallExpression(
+            callee = call.callee,
+            leftParen = call.leftParen,
+            argument = call.arguments.single(),
+            rightParen = call.rightParen,
+        )
+        val function = assertIs<FunctionDeclaration>(
+            requireNotNull(parseExpandedFunction("fn id(a: Int) { a } id(1)")),
+        )
+        val untypedFunction = assertIs<FunctionDeclaration>(
+            requireNotNull(parseExpandedFunction("fn id(a) { a } id(1)")),
+        )
+        val parameter = function.parameters.single()
+        val untypedParameter = untypedFunction.parameters.single()
+
+        assertEquals(SourceSpan("sample.kk", 6, 7), call.argument.span)
+        assertEquals(call.arguments.single(), call.argument)
+        assertEquals(call.argument, compatibilityCall.argument)
+        assertEquals(SourceSpan("sample.kk", 6, 12), parameter.span)
+        assertEquals(SourceSpan("sample.kk", 6, 7), untypedParameter.span)
+        assertEquals(SourceSpan("sample.kk", 14, 19), function.body.span)
     }
 
     /**
@@ -282,6 +387,15 @@ class ParserTest {
         val parseResult = Parser(lexResult.tokens, parserConfig).parseProgramDocument()
         return parseResult.copy(diagnostics = lexResult.diagnostics + parseResult.diagnostics)
     }
+
+    /**
+     * 解析并展开源码中的单个函数声明。
+     * Parses and expands the single function declaration in source text.
+     */
+    private fun parseExpandedFunction(text: String): FunctionDeclaration? {
+        val program = parseProgram(text).program
+        return SeedModifierExpander().expand(program).program?.declarations?.singleOrNull() as? FunctionDeclaration
+    }
 }
 
 /**
@@ -293,7 +407,10 @@ private fun Expression.render(): String =
         is IdentifierExpression -> "id($name)"
         is IntegerExpression -> "int($digits)"
         is StringExpression -> "string($text)"
-        is CallExpression -> "call(${callee.name}, ${argument.render()})"
+        is CallExpression -> {
+            val argumentsText = arguments.joinToString(prefix = "", separator = ", ") { it.render() }
+            if (arguments.isEmpty()) "call(${callee.name})" else "call(${callee.name}, $argumentsText)"
+        }
         is PrefixExpression -> "(${operator.lexeme} ${operand.render()})"
         is BinaryExpression -> "(${operator.lexeme} ${left.render()} ${right.render()})"
         is GroupedExpression -> "(group ${expression.render()})"
@@ -314,8 +431,13 @@ private fun AstProgram.render(): String {
 }
 
 /**
- * 将 val declaration 渲染为稳定的测试断言字符串。
- * Renders a val declaration into a stable assertion string for tests.
+ * 将 declaration 渲染为稳定的测试断言字符串。
+ * Renders a declaration into a stable assertion string for tests.
  */
-private fun ValDeclaration.render(): String =
-    "val $name = ${initializer.render()};"
+private fun Declaration.render(): String =
+    when (this) {
+        is ValDeclaration -> "val $name = ${initializer.render()};"
+        is ModifierDeclaration -> "modifier $name;"
+        is RawModifierApplication -> "raw $name;"
+        is FunctionDeclaration -> "fn $name;"
+    }

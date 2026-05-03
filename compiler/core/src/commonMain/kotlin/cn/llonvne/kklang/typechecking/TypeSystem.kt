@@ -2,12 +2,17 @@ package cn.llonvne.kklang.typechecking
 
 import cn.llonvne.kklang.binding.BoundProgram
 import cn.llonvne.kklang.binding.BoundBinary
+import cn.llonvne.kklang.binding.BoundDeclaration
 import cn.llonvne.kklang.binding.BoundExpression
+import cn.llonvne.kklang.binding.BoundFunctionCall
+import cn.llonvne.kklang.binding.BoundFunctionDeclaration
+import cn.llonvne.kklang.binding.BoundFunctionParameter
 import cn.llonvne.kklang.binding.BoundGrouped
 import cn.llonvne.kklang.binding.BoundInteger
 import cn.llonvne.kklang.binding.BoundMissing
 import cn.llonvne.kklang.binding.BoundPrintCall
 import cn.llonvne.kklang.binding.BoundPrefix
+import cn.llonvne.kklang.binding.BoundValDeclaration
 import cn.llonvne.kklang.binding.BoundVariable
 import cn.llonvne.kklang.binding.BindingSymbol
 import cn.llonvne.kklang.binding.BoundString
@@ -49,6 +54,12 @@ sealed interface TypeRef {
      * Unit type that only represents completion of a side effect.
      */
     data object Unit : TypeRef
+
+    /**
+     * 函数类型，参数和返回值都是已解析类型引用。
+     * Function type whose parameters and return value are resolved type references.
+     */
+    data class Function(val parameters: List<TypeRef>, val returns: TypeRef) : TypeRef
 }
 
 /**
@@ -68,7 +79,18 @@ data class TypedProgram(
     val declarations: List<TypedValDeclaration>,
     val expression: TypedExpression,
     val type: TypeRef = expression.type,
+    val functions: List<TypedFunctionDeclaration> = emptyList(),
+    val orderedDeclarations: List<TypedDeclaration> = declarations + functions,
 )
+
+/**
+ * 类型检查后 declaration 的共同接口。
+ * Shared interface for type-checked declarations.
+ */
+sealed interface TypedDeclaration {
+    val name: String
+    val type: TypeRef
+}
 
 /**
  * 类型检查后的不可变 val declaration。
@@ -78,9 +100,38 @@ data class TypedValDeclaration(
     val syntax: ValDeclaration,
     val symbol: BindingSymbol,
     val initializer: TypedExpression,
-    val type: TypeRef = initializer.type,
-) {
-    val name: String
+    override val type: TypeRef = initializer.type,
+) : TypedDeclaration {
+    override val name: String
+        get() = symbol.name
+}
+
+/**
+ * 类型检查后的函数参数。
+ * Type-checked function parameter.
+ */
+data class TypedFunctionParameter(
+    val syntax: cn.llonvne.kklang.frontend.parsing.FunctionParameter,
+    val symbol: BindingSymbol,
+    override val type: TypeRef,
+) : TypedDeclaration {
+    override val name: String
+        get() = symbol.name
+}
+
+/**
+ * 类型检查后的顶层函数声明。
+ * Type-checked top-level function declaration.
+ */
+data class TypedFunctionDeclaration(
+    val syntax: cn.llonvne.kklang.frontend.parsing.FunctionDeclaration,
+    val symbol: BindingSymbol,
+    val parameters: List<TypedFunctionParameter>,
+    val declarations: List<TypedValDeclaration>,
+    val expression: TypedExpression,
+    override val type: TypeRef.Function,
+) : TypedDeclaration {
+    override val name: String
         get() = symbol.name
 }
 
@@ -110,6 +161,17 @@ data class TypedPrintCall(
     override val syntax: CallExpression,
     val argument: TypedExpression,
     override val type: TypeRef = TypeRef.Unit,
+) : TypedExpression
+
+/**
+ * 类型检查后的函数调用 expression。
+ * Type-checked function-call expression.
+ */
+data class TypedFunctionCall(
+    override val syntax: CallExpression,
+    val symbol: BindingSymbol,
+    val arguments: List<TypedExpression>,
+    override val type: TypeRef,
 ) : TypedExpression
 
 /**
@@ -202,29 +264,111 @@ class SeedTypeChecker : TypeChecker {
         val diagnostics = DiagnosticBag()
         val scope = mutableMapOf<BindingSymbol, TypeRef>()
         val declarations = mutableListOf<TypedValDeclaration>()
+        val functions = mutableListOf<TypedFunctionDeclaration>()
+        val orderedDeclarations = mutableListOf<TypedDeclaration>()
 
-        for (declaration in program.declarations) {
-            val initializer = checkExpression(declaration.initializer, scope, diagnostics)
-            if (initializer != null) {
-                scope[declaration.symbol] = initializer.type
-                declarations += TypedValDeclaration(
-                    syntax = declaration.syntax,
-                    symbol = declaration.symbol,
-                    initializer = initializer,
-                )
+        for (declaration in program.orderedDeclarations) {
+            when (declaration) {
+                is BoundValDeclaration -> {
+                    val typed = checkValDeclaration(declaration, scope, diagnostics)
+                    if (typed != null) {
+                        declarations += typed
+                        orderedDeclarations += typed
+                    }
+                }
+                is BoundFunctionDeclaration -> {
+                    val typed = checkFunctionDeclaration(declaration, scope, diagnostics)
+                    if (typed != null) {
+                        functions += typed
+                        orderedDeclarations += typed
+                    }
+                }
             }
         }
 
+        val declarationDiagnostics = diagnostics.toList()
+        if (declarationDiagnostics.isNotEmpty()) {
+            return ProgramTypeCheckResult(program = null, diagnostics = declarationDiagnostics)
+        }
         val expression = checkExpression(program.expression, scope, diagnostics)
             ?: return ProgramTypeCheckResult(program = null, diagnostics = diagnostics.toList())
-        val diagnosticsList = diagnostics.toList()
-        if (diagnosticsList.isNotEmpty()) {
-            return ProgramTypeCheckResult(program = null, diagnostics = diagnosticsList)
-        }
         return ProgramTypeCheckResult(
-            program = TypedProgram(declarations = declarations.toList(), expression = expression),
-            diagnostics = diagnosticsList,
+            program = TypedProgram(
+                declarations = declarations.toList(),
+                expression = expression,
+                functions = functions.toList(),
+                orderedDeclarations = orderedDeclarations.toList(),
+            ),
+            diagnostics = emptyList(),
         )
+    }
+
+    /**
+     * 类型检查一个已绑定 val declaration，并把类型写入当前 scope。
+     * Type-checks one bound val declaration and writes its type into the current scope.
+     */
+    private fun checkValDeclaration(
+        declaration: BoundValDeclaration,
+        scope: MutableMap<BindingSymbol, TypeRef>,
+        diagnostics: DiagnosticBag,
+    ): TypedValDeclaration? {
+        val initializer = checkExpression(declaration.initializer, scope, diagnostics) ?: return null
+        scope[declaration.symbol] = initializer.type
+        return TypedValDeclaration(
+            syntax = declaration.syntax,
+            symbol = declaration.symbol,
+            initializer = initializer,
+        )
+    }
+
+    /**
+     * 类型检查一个函数声明，参数类型必须显式可解析，返回类型由 body 推导。
+     * Type-checks one function declaration; parameter types must be explicit and resolvable, and return type is inferred from the body.
+     */
+    private fun checkFunctionDeclaration(
+        declaration: BoundFunctionDeclaration,
+        scope: MutableMap<BindingSymbol, TypeRef>,
+        diagnostics: DiagnosticBag,
+    ): TypedFunctionDeclaration? {
+        val functionScope = scope.toMutableMap()
+        val parameters = declaration.parameters.mapNotNull { checkParameter(it, functionScope, diagnostics) }
+        if (parameters.size != declaration.parameters.size) {
+            return null
+        }
+        val localDeclarations = mutableListOf<TypedValDeclaration>()
+        for (localDeclaration in declaration.body.declarations) {
+            checkValDeclaration(localDeclaration, functionScope, diagnostics)?.let(localDeclarations::add)
+        }
+        val expression = checkExpression(declaration.body.expression, functionScope, diagnostics) ?: return null
+        val type = TypeRef.Function(parameters.map { it.type }, expression.type)
+        scope[declaration.symbol] = type
+        return TypedFunctionDeclaration(
+            syntax = declaration.syntax,
+            symbol = declaration.symbol,
+            parameters = parameters,
+            declarations = localDeclarations.toList(),
+            expression = expression,
+            type = type,
+        )
+    }
+
+    /**
+     * 类型检查函数参数注解，并把参数类型写入函数局部 scope。
+     * Type-checks a function parameter annotation and writes the parameter type into the function-local scope.
+     */
+    private fun checkParameter(
+        parameter: BoundFunctionParameter,
+        scope: MutableMap<BindingSymbol, TypeRef>,
+        diagnostics: DiagnosticBag,
+    ): TypedFunctionParameter? {
+        val typeName = parameter.syntax.typeName
+        if (typeName == null) {
+            diagnostics.report("TYPE004", "missing parameter type", parameter.syntax.span)
+            return null
+        }
+        val type = typeFromAnnotation(typeName, parameter.syntax.span, diagnostics) ?: return null
+        scope[parameter.symbol] = type
+        return TypedFunctionParameter(syntax = parameter.syntax, symbol = parameter.symbol, type = type)
     }
 
     /**
@@ -268,6 +412,7 @@ class SeedTypeChecker : TypeChecker {
             is BoundInteger -> TypedInteger(expression.syntax)
             is BoundString -> TypedString(expression.syntax)
             is BoundPrintCall -> checkPrintCall(expression, scope, diagnostics)
+            is BoundFunctionCall -> checkFunctionCall(expression, scope, diagnostics)
             is BoundGrouped -> checkGrouped(expression, scope, diagnostics)
             is BoundPrefix -> checkPrefix(expression, scope, diagnostics)
             is BoundBinary -> checkBinary(expression, scope, diagnostics)
@@ -284,8 +429,48 @@ class SeedTypeChecker : TypeChecker {
         scope: Map<BindingSymbol, TypeRef>,
         diagnostics: DiagnosticBag,
     ): TypedExpression? {
+        if (expression.arguments.size != 1) {
+            diagnostics.report("TYPE005", "function arity mismatch", expression.syntax.span)
+            return null
+        }
         val argument = checkExpression(expression.argument, scope, diagnostics) ?: return null
         return TypedPrintCall(syntax = expression.syntax, argument = argument)
+    }
+
+    /**
+     * 类型检查函数调用的 callee、参数数量和参数类型。
+     * Type-checks a function call's callee, argument count, and argument types.
+     */
+    private fun checkFunctionCall(
+        expression: BoundFunctionCall,
+        scope: Map<BindingSymbol, TypeRef>,
+        diagnostics: DiagnosticBag,
+    ): TypedExpression? {
+        val calleeType = scope[expression.symbol]
+        if (calleeType !is TypeRef.Function) {
+            diagnostics.report("TYPE002", "unsupported expression", expression.syntax.span)
+            return null
+        }
+        if (calleeType.parameters.size != expression.arguments.size) {
+            diagnostics.report("TYPE005", "function arity mismatch", expression.syntax.span)
+            return null
+        }
+        val arguments = expression.arguments.mapNotNull { checkExpression(it, scope, diagnostics) }
+        if (arguments.size != expression.arguments.size) {
+            return null
+        }
+        for ((index, argument) in arguments.withIndex()) {
+            if (argument.type != calleeType.parameters[index]) {
+                diagnostics.report("TYPE006", "function argument type mismatch", argument.syntax.span)
+                return null
+            }
+        }
+        return TypedFunctionCall(
+            syntax = expression.syntax,
+            symbol = expression.symbol,
+            arguments = arguments,
+            type = calleeType.returns,
+        )
     }
 
     /**
@@ -364,6 +549,25 @@ class SeedTypeChecker : TypeChecker {
             TypedVariable(syntax = expression.syntax, symbol = expression.symbol, type = type)
         }
     }
+
+    /**
+     * 将源码类型注解解析为当前 TypeRef。
+     * Resolves a source type annotation into the current TypeRef.
+     */
+    private fun typeFromAnnotation(
+        name: String,
+        span: cn.llonvne.kklang.frontend.SourceSpan,
+        diagnostics: DiagnosticBag,
+    ): TypeRef? =
+        when (name) {
+            "Int" -> TypeRef.Int64
+            "String" -> TypeRef.String
+            "Unit" -> TypeRef.Unit
+            else -> {
+                diagnostics.report("TYPE003", "unknown type annotation", span)
+                null
+            }
+        }
 
     /**
      * 报告当前类型系统范围不支持的 expression。

@@ -5,8 +5,9 @@ This spec defines the first variable-binding mechanism for `kklang`.
 
 ## Current Scope / 当前范围
 
-第一版只引入 Kotlin 风格 `val` declaration。
-The first version introduces only Kotlin-style `val` declarations.
+第一版引入 Kotlin 风格 `val` declaration 和由 `fn` modifier expansion 产生的顶层函数声明。
+The first version introduces Kotlin-style `val` declarations plus top-level
+function declarations produced by `fn` modifier expansion.
 
 binding resolver 是 parsing 之后、type checking 之前的语言核心阶段。
 The binding resolver is a language-core phase after parsing and before type
@@ -33,8 +34,11 @@ The first bound AST nodes are:
 | --- | --- |
 | `BoundProgram` | bound program / 已绑定程序 |
 | `BoundValDeclaration` | bound immutable val declaration / 已绑定不可变 val 声明 |
+| `BoundFunctionDeclaration` | bound top-level function declaration / 已绑定顶层函数声明 |
+| `BoundFunctionParameter` | bound function parameter / 已绑定函数参数 |
+| `BoundFunctionCall` | bound function call / 已绑定函数调用 |
 | `BindingScope` | ordered current-scope symbol table / 有序的当前作用域符号表 |
-| `BindingSymbol` | immutable val symbol / 不可变 val 符号 |
+| `BindingSymbol` | immutable val, parameter, or function symbol / 不可变 val、参数或函数符号 |
 | `BoundInteger` | bound integer literal / 已绑定整数字面量 |
 | `BoundString` | bound string literal / 已绑定字符串字面量 |
 | `BoundPrintCall` | bound builtin `print` call / 已绑定内建 `print` 调用 |
@@ -82,13 +86,27 @@ print(expression)
 ```
 
 program 由零个或多个 `val` declaration 加一个最终 expression 组成。
-A program consists of zero or more `val` declarations followed by one final
-expression.
+program 由零个或多个 declaration 加一个最终 expression 组成；第一版 declaration 可以是 `val` 或 modifier expansion 后的 `fn` 函数。
+A program consists of zero or more declarations followed by one final
+expression; first-version declarations may be `val` or `fn` functions after
+modifier expansion.
 
 ```text
 val x = 1;
 val y = x + 2;
 y * 3
+```
+
+函数声明来自 `fn` modifier expansion，语法如下。
+Function declarations come from `fn` modifier expansion and use the syntax
+below.
+
+DSL term / DSL 术语：`function declaration`。
+
+```text
+fn add(left: Int, right: Int) {
+    left + right
+}
 ```
 
 ## Scope And Order / 作用域与顺序
@@ -132,6 +150,18 @@ defines the builtin `print` call.
 Redeclaring the same `val` name in the same program scope must fail.
 
 DSL term / DSL 术语：`same-scope duplicate val is rejected`。
+
+函数声明按源码顺序进入同一个 program scope；函数体不能解析自身或后续函数。
+Function declarations enter the same program scope in source order; function
+bodies cannot resolve themselves or later functions.
+
+DSL term / DSL 术语：`function declarations bind in source order`。
+
+函数参数在函数体局部作用域中绑定；同一个函数参数列表中重复参数名必须失败。
+Function parameters bind in the function-body local scope; duplicate parameter
+names in the same function parameter list must fail.
+
+DSL term / DSL 术语：`duplicate function parameter is rejected`。
 
 ## Reassignment / 重新赋值
 

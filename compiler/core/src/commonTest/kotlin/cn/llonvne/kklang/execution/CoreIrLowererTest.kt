@@ -8,6 +8,7 @@ import cn.llonvne.kklang.frontend.lexing.TokenKind
 import cn.llonvne.kklang.frontend.parsing.BinaryExpression
 import cn.llonvne.kklang.frontend.parsing.Parser
 import cn.llonvne.kklang.frontend.parsing.PrefixExpression
+import cn.llonvne.kklang.metaprogramming.SeedModifierExpander
 import cn.llonvne.kklang.typechecking.SeedTypeChecker
 import cn.llonvne.kklang.typechecking.TypeRef
 import cn.llonvne.kklang.typechecking.TypedBinary
@@ -85,6 +86,43 @@ class CoreIrLowererTest {
     }
 
     /**
+     * 验证函数声明和函数调用会 lowering 为 Core IR 函数节点和调用节点。
+     * Verifies that function declarations and calls lower into Core IR function and call nodes.
+     */
+    @Test
+    fun `lowerer lowers function declarations and calls`() {
+        val result = lowerExpandedProgram("fn add(a: Int, b: Int) { val c = a + b; c } add(1, 2)")
+
+        assertFalse(result.hasErrors)
+        val program = requireNotNull(result.program)
+        val function = program.functions.single()
+        assertEquals("add", function.name)
+        assertEquals(listOf("a", "b"), function.parameters)
+        assertEquals("(+ var(a) var(b))", function.body.declarations.single().initializer.render())
+        assertEquals("call(add, int64(1), int64(2))", program.expression.render())
+    }
+
+    /**
+     * 验证只有函数声明时 program span 会从函数声明覆盖到最终表达式。
+     * Verifies that a program with only function declarations spans from the function declaration to the final expression.
+     */
+    @Test
+    fun `ir program span includes function declarations`() {
+        val program = requireNotNull(lowerExpandedProgram("fn id(a: Int) { a } id(1)").program)
+        val span = SourceSpan("sample.kk", 0, 1)
+        val declarationFirst = IrProgram(
+            declarations = listOf(IrValDeclaration("x", IrInt64(1, span), span)),
+            expression = IrInt64(2, SourceSpan("sample.kk", 2, 3)),
+            functions = program.functions,
+        )
+        val expressionOnly = IrProgram(emptyList(), IrInt64(1, span))
+
+        assertEquals(SourceSpan("sample.kk", 0, 25), program.span)
+        assertEquals(SourceSpan("sample.kk", 0, 3), declarationFirst.span)
+        assertEquals(span, expressionOnly.span)
+    }
+
+    /**
      * 验证 print argument lowering 失败会向外传播。
      * Verifies that a print argument lowering failure propagates outward.
      */
@@ -109,6 +147,24 @@ class CoreIrLowererTest {
         assertNull(result.program)
         assertNull(result.ir)
         assertEquals("EXEC003", result.diagnostics.single().code)
+    }
+
+    /**
+     * 验证函数体 declaration、函数体 expression 和函数调用 argument 的 lowering 失败都会传播。
+     * Verifies that lowering failures from function body declarations, function body expressions, and call arguments propagate.
+     */
+    @Test
+    fun `lowerer reports function lowering failures`() {
+        val bodyDeclaration = lowerExpandedProgram("fn bad(a: Int) { val x = 9223372036854775808; a } bad(1)")
+        val bodyExpression = lowerExpandedProgram("fn bad(a: Int) { 9223372036854775808 } bad(1)")
+        val argument = lowerExpandedProgram("fn id(a: Int) { a } id(9223372036854775808)")
+
+        assertTrue(bodyDeclaration.hasErrors)
+        assertEquals("EXEC003", bodyDeclaration.diagnostics.single().code)
+        assertTrue(bodyExpression.hasErrors)
+        assertEquals("EXEC003", bodyExpression.diagnostics.single().code)
+        assertTrue(argument.hasErrors)
+        assertEquals("EXEC003", argument.diagnostics.single().code)
     }
 
     /**
@@ -204,6 +260,13 @@ class CoreIrLowererTest {
         CoreIrLowerer().lower(typeProgram(text))
 
     /**
+     * 先执行 modifier expansion，再解析、类型检查并 lowering 一个测试 program。
+     * Runs modifier expansion first, then parses, type-checks, and lowers one test program.
+     */
+    private fun lowerExpandedProgram(text: String): IrLoweringResult =
+        CoreIrLowerer().lower(typeExpandedProgram(text))
+
+    /**
      * 解析并类型检查一段测试源码。
      * Parses and type-checks one test source snippet.
      */
@@ -216,6 +279,13 @@ class CoreIrLowererTest {
      */
     private fun typeProgram(text: String): TypedProgram =
         requireNotNull(SeedTypeChecker().check(parseProgram(text)).program)
+
+    /**
+     * 先执行 modifier expansion，再类型检查一个测试 program。
+     * Runs modifier expansion first, then type-checks one test program.
+     */
+    private fun typeExpandedProgram(text: String): TypedProgram =
+        requireNotNull(SeedTypeChecker().check(expandProgram(text)).program)
 
     /**
      * 使用默认 lexer/parser 解析一段测试源码。
@@ -234,6 +304,13 @@ class CoreIrLowererTest {
         Parser(Lexer().tokenize(SourceText.of("sample.kk", text)).tokens)
             .parseProgramDocument()
             .program
+
+    /**
+     * 使用默认 parser 和 modifier expander 构造 expanded AST program。
+     * Builds an expanded AST program with the default parser and modifier expander.
+     */
+    private fun expandProgram(text: String) =
+        requireNotNull(SeedModifierExpander().expand(parseProgram(text)).program)
 }
 
 /**
@@ -246,6 +323,7 @@ private fun IrExpression.render(): String =
         is IrString -> "string($value)"
         is IrPrint -> "print(${argument.render()})"
         is IrVariable -> "var($name)"
+        is IrCall -> "call($callee, ${arguments.joinToString { it.render() }})"
         is IrUnary -> "(${operator.text} ${operand.render()})"
         is IrBinary -> "(${operator.text} ${left.render()} ${right.render()})"
     }

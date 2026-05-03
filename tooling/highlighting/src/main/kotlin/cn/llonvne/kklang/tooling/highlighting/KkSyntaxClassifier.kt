@@ -77,7 +77,9 @@ class KkSyntaxClassifier(
      */
     private fun categoryFor(kind: TokenKind): KkHighlightTokenCategory =
         when (kind) {
-            TokenKinds.Val -> KkHighlightTokenCategory.Keyword
+            TokenKinds.Val,
+            TokenKinds.Modifier,
+            -> KkHighlightTokenCategory.Keyword
             TokenKinds.Identifier -> KkHighlightTokenCategory.Identifier
             TokenKinds.Integer -> KkHighlightTokenCategory.Integer
             TokenKinds.String -> KkHighlightTokenCategory.String
@@ -89,7 +91,14 @@ class KkSyntaxClassifier(
             -> KkHighlightTokenCategory.Operator
             TokenKinds.LeftParen,
             TokenKinds.RightParen,
+            TokenKinds.LeftBrace,
+            TokenKinds.RightBrace,
+            TokenKinds.LeftBracket,
+            TokenKinds.RightBracket,
             TokenKinds.Semicolon,
+            TokenKinds.Colon,
+            TokenKinds.Comma,
+            TokenKinds.Question,
             -> KkHighlightTokenCategory.Delimiter
             TokenKinds.Whitespace -> KkHighlightTokenCategory.Whitespace
             TokenKinds.Unknown -> KkHighlightTokenCategory.Unknown

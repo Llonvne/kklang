@@ -18,7 +18,7 @@ class BindingSpecTest {
     @Test
     fun `binding dsl spec records val syntax`() {
         assertEquals(
-            listOf("val declaration", "val identifier = expression;", "builtin print call"),
+            listOf("val declaration", "val identifier = expression;", "function declaration", "builtin print call"),
             minimalBindingSpec.syntaxes,
         )
     }
@@ -33,6 +33,9 @@ class BindingSpecTest {
             listOf(
                 "BoundProgram",
                 "BoundValDeclaration",
+                "BoundFunctionDeclaration",
+                "BoundFunctionParameter",
+                "BoundFunctionCall",
                 "BindingScope",
                 "BindingSymbol",
                 "BoundInteger",
@@ -68,6 +71,8 @@ class BindingSpecTest {
                 "unresolved identifiers are rejected",
                 "builtin print call",
                 "same-scope duplicate val is rejected",
+                "function declarations bind in source order",
+                "duplicate function parameter is rejected",
                 "assignment expression is not part of the grammar",
             ),
             minimalBindingSpec.scopeRules,

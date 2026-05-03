@@ -79,6 +79,7 @@ class ExecutionSpecBuilder(private val name: String) {
 val minimalExecutionSpec = executionSpec("minimal-execution") {
     phase("lexer")
     phase("parser")
+    phase("modifier expansion")
     phase("binding")
     phase("type checking")
     phase("core ir lowering")
@@ -86,14 +87,18 @@ val minimalExecutionSpec = executionSpec("minimal-execution") {
 
     irNode("IrProgram")
     irNode("IrValDeclaration")
+    irNode("IrFunctionDeclaration")
     irNode("IrInt64")
     irNode("IrString")
     irNode("IrPrint")
     irNode("IrVariable")
+    irNode("IrCall")
     irNode("IrUnary")
     irNode("IrBinary")
 
     supportedForm("immutable val declaration")
+    supportedForm("top-level function declaration")
+    supportedForm("function call")
     supportedForm("identifier reference")
     supportedForm("integer literal")
     supportedForm("string literal")

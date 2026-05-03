@@ -93,14 +93,40 @@ class KkSyntaxClassifierTest {
     }
 
     /**
+     * 验证 modifier 关键字和新增定界符使用共享分类。
+     * Verifies that the modifier keyword and new delimiters use shared categories.
+     */
+    @Test
+    fun `classifier maps modifier syntax tokens`() {
+        val tokens = KkSyntaxClassifier().classify(SourceText.of("sample.kk", "modifier fn { [x: Int?], }"))
+
+        assertEquals(
+            listOf(
+                KkHighlightTokenCategory.Keyword,
+                KkHighlightTokenCategory.Identifier,
+                KkHighlightTokenCategory.Delimiter,
+                KkHighlightTokenCategory.Delimiter,
+                KkHighlightTokenCategory.Identifier,
+                KkHighlightTokenCategory.Delimiter,
+                KkHighlightTokenCategory.Identifier,
+                KkHighlightTokenCategory.Delimiter,
+                KkHighlightTokenCategory.Delimiter,
+                KkHighlightTokenCategory.Delimiter,
+                KkHighlightTokenCategory.Delimiter,
+            ),
+            tokens.map { it.category },
+        )
+    }
+
+    /**
      * 验证自定义未知 token kind 会落到 unknown 分类。
      * Verifies that a custom unknown token kind falls back to the unknown category.
      */
     @Test
     fun `classifier maps custom token kinds to unknown`() {
-        val question = TokenKind("question")
-        val config = LexerConfig.default().withRule(LexerRule.literal("question", question, "?"))
-        val tokens = KkSyntaxClassifier(config).classify(SourceText.of("sample.kk", "?"))
+        val percent = TokenKind("percent")
+        val config = LexerConfig.default().withRule(LexerRule.literal("percent", percent, "%"))
+        val tokens = KkSyntaxClassifier(config).classify(SourceText.of("sample.kk", "%"))
 
         assertEquals(listOf(KkHighlightTokenCategory.Unknown), tokens.map { it.category })
     }

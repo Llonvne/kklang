@@ -45,12 +45,12 @@ current default lexer.
 
 | Category / 分类 | Token kinds / Token 类型 |
 | --- | --- |
-| `keyword` | `val` |
+| `keyword` | `val`, `modifier` |
 | `identifier` | `identifier` |
 | `integer` | `integer` |
 | `string` | `string` |
 | `operator` | `plus`, `minus`, `star`, `slash`, `equals` |
-| `delimiter` | `left_paren`, `right_paren`, `semicolon` |
+| `delimiter` | `left_paren`, `right_paren`, `left_brace`, `right_brace`, `left_bracket`, `right_bracket`, `semicolon`, `colon`, `comma`, `question` |
 | `whitespace` | `whitespace` |
 | `unknown` | `unknown` |
 | `eof` | `eof` |

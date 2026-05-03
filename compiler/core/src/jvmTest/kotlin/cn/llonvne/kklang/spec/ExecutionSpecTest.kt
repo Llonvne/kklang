@@ -18,7 +18,7 @@ class ExecutionSpecTest {
     @Test
     fun `execution dsl spec records pipeline phases`() {
         assertEquals(
-            listOf("lexer", "parser", "binding", "type checking", "core ir lowering", "core ir evaluation"),
+            listOf("lexer", "parser", "modifier expansion", "binding", "type checking", "core ir lowering", "core ir evaluation"),
             minimalExecutionSpec.phases,
         )
     }
@@ -33,10 +33,12 @@ class ExecutionSpecTest {
             listOf(
                 "IrProgram",
                 "IrValDeclaration",
+                "IrFunctionDeclaration",
                 "IrInt64",
                 "IrString",
                 "IrPrint",
                 "IrVariable",
+                "IrCall",
                 "IrUnary",
                 "IrBinary",
             ),
@@ -53,6 +55,8 @@ class ExecutionSpecTest {
         assertEquals(
             listOf(
                 "immutable val declaration",
+                "top-level function declaration",
+                "function call",
                 "identifier reference",
                 "integer literal",
                 "string literal",

@@ -104,9 +104,12 @@ val minimalTypeSystemSpec = typeSystemSpec("minimal-type-system") {
     type("TypeRef.Int64")
     type("TypeRef.String")
     type("TypeRef.Unit")
+    type("TypeRef.Function")
 
     typedNode("TypedProgram")
     typedNode("TypedValDeclaration")
+    typedNode("TypedFunctionDeclaration")
+    typedNode("TypedFunctionParameter")
     typedNode("TypedExpression")
     typedNode("TypedInteger")
     typedNode("TypedString")
@@ -115,8 +118,11 @@ val minimalTypeSystemSpec = typeSystemSpec("minimal-type-system") {
     typedNode("TypedGrouped")
     typedNode("TypedPrefix")
     typedNode("TypedBinary")
+    typedNode("TypedFunctionCall")
 
     supportedForm("val declaration")
+    supportedForm("top-level function declaration")
+    supportedForm("function call")
     supportedForm("identifier reference")
     supportedForm("integer literal")
     supportedForm("string literal")
@@ -133,7 +139,13 @@ val minimalTypeSystemSpec = typeSystemSpec("minimal-type-system") {
     bindingRule("identifier reference uses bound val type")
     bindingRule("TypedValDeclaration preserves BindingSymbol")
     bindingRule("TypedVariable preserves BindingSymbol")
+    bindingRule("parameter type syntax is optional")
+    bindingRule("function return type is inferred from body")
 
     diagnostic("TYPE001", "unresolved identifier")
     diagnostic("TYPE002", "unsupported expression")
+    diagnostic("TYPE003", "unknown type annotation")
+    diagnostic("TYPE004", "missing parameter type for executable function")
+    diagnostic("TYPE005", "function arity mismatch")
+    diagnostic("TYPE006", "function argument type mismatch")
 }

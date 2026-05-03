@@ -9,8 +9,9 @@ This spec defines the current minimal compiler pipeline for `kklang`.
 The compiler pipeline converts source text into a Core IR program consumable by
 execution backends.
 
-当前管线只处理已有的 seed expression grammar。
-The current pipeline only handles the existing seed expression grammar.
+当前管线处理已有 seed expression grammar，以及第一版声明级 `modifier` expansion。
+The current pipeline handles the existing seed expression grammar plus the first
+declaration-level `modifier` expansion.
 
 当前管线只定义最小 binding 和类型检查骨架，不定义优化、字节码生成、对象布局或完整模块系统。
 The current pipeline defines only the minimal binding and type-checking
@@ -37,8 +38,8 @@ The failure result type is `CompilationResult.Failure`.
 
 ## Program Model / Program 模型
 
-当前 `AstProgram` 包含零个或多个 `val` declaration 和一个最终 expression。
-The current `AstProgram` contains zero or more `val` declarations and one final
+当前 `AstProgram` 包含零个或多个 declaration 和一个最终 expression。
+The current `AstProgram` contains zero or more declarations and one final
 expression.
 
 当前 `CompiledProgram` 包装一个 Core IR program。
@@ -58,9 +59,10 @@ Compiler phases must run in this order.
 
 1. lexing / 词法分析
 2. parsing / 语法分析
-3. binding / 绑定
-4. type checking / 类型检查
-5. lowering / Core IR 降级
+3. modifier expansion / modifier expansion
+4. binding / 绑定
+5. type checking / 类型检查
+6. lowering / Core IR 降级
 
 如果某个阶段产生 diagnostics，管线必须立即停止，不得运行后续阶段。
 If any phase produces diagnostics, the pipeline must stop immediately and must

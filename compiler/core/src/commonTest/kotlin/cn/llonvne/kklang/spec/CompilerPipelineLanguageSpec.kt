@@ -79,6 +79,7 @@ class CompilerPipelineSpecBuilder(private val name: String) {
 val minimalCompilerPipelineSpec = compilerPipelineSpec("minimal-compiler-pipeline") {
     phase("lexing")
     phase("parsing")
+    phase("modifier expansion")
     phase("binding")
     phase("type checking")
     phase("lowering")
@@ -88,7 +89,8 @@ val minimalCompilerPipelineSpec = compilerPipelineSpec("minimal-compiler-pipelin
     resultType("CompilationResult.Failure")
 
     stopRule("lexer diagnostics stop before parsing")
-    stopRule("parser diagnostics stop before binding")
+    stopRule("parser diagnostics stop before modifier expansion")
+    stopRule("modifier diagnostics stop before binding")
     stopRule("binding diagnostics stop before type checking")
     stopRule("type checker diagnostics stop before lowering")
     stopRule("lowering diagnostics stop before execution")

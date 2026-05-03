@@ -109,12 +109,24 @@ val toolingLanguageSpec = toolingSpec {
     fileExtension("kk")
 
     highlighting {
-        category("keyword", "val")
+        category("keyword", "val", "modifier")
         category("identifier", "identifier")
         category("integer", "integer")
         category("string", "string")
         category("operator", "plus", "minus", "star", "slash", "equals")
-        category("delimiter", "left_paren", "right_paren", "semicolon")
+        category(
+            "delimiter",
+            "left_paren",
+            "right_paren",
+            "left_brace",
+            "right_brace",
+            "left_bracket",
+            "right_bracket",
+            "semicolon",
+            "colon",
+            "comma",
+            "question",
+        )
         category("whitespace", "whitespace")
         category("unknown", "unknown")
         category("eof", "eof")

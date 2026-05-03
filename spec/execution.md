@@ -5,20 +5,21 @@ This spec defines the first minimal execution path for `kklang`.
 
 ## Current Scope / 当前范围
 
-第一版执行链路只连接现有 seed expression grammar。
-The first execution path only connects the existing seed expression grammar.
+第一版执行链路连接现有 seed expression grammar，以及由 `fn` modifier expansion 产生的顶层函数。
+The first execution path connects the existing seed expression grammar plus
+top-level functions produced by `fn` modifier expansion.
 
-执行顺序如下：source text、lexer、parser、binding、type checking、Core IR lowering、Core IR evaluation、execution result。
-The execution order is: source text, lexer, parser, binding, type checking,
-Core IR lowering, Core IR evaluation, execution result.
+执行顺序如下：source text、lexer、parser、modifier expansion、binding、type checking、Core IR lowering、Core IR evaluation、execution result。
+The execution order is: source text, lexer, parser, modifier expansion, binding,
+type checking, Core IR lowering, Core IR evaluation, execution result.
 
 执行器必须通过 compiler pipeline 进入 lexer、parser 和 Core IR lowering。
 The execution engine must enter lexing, parsing, and Core IR lowering through
 the compiler pipeline.
 
-本规范不定义完整 VM、对象系统、用户自定义函数调用、可变变量或完整类型系统。
-This spec does not define a full VM, object system, user-defined function
-calls, mutable variables, or a full type system.
+本规范不定义完整 VM、对象系统、first-class function、递归、forward reference、可变变量或完整类型系统。
+This spec does not define a full VM, object system, first-class functions,
+recursion, forward references, mutable variables, or a full type system.
 
 ## Result Model / 结果模型
 
@@ -61,18 +62,20 @@ stderr, and exit code.
 Core IR 是 typed AST 和 runtime value model 之间的中间层。
 Core IR is the intermediate layer between typed AST and the runtime value model.
 
-第一版 Core IR 包含整数、字符串、内建 `print` 和整数运算。
-The first Core IR contains integers, strings, builtin `print`, and integer
-operations.
+第一版 Core IR 包含整数、字符串、内建 `print`、顶层函数和整数运算。
+The first Core IR contains integers, strings, builtin `print`, top-level
+functions, and integer operations.
 
 | IR / IR | Meaning / 含义 |
 | --- | --- |
 | `IrProgram` | declarations plus final expression / 声明加最终表达式 |
 | `IrValDeclaration` | immutable val declaration / 不可变 val 声明 |
+| `IrFunctionDeclaration` | top-level function declaration / 顶层函数声明 |
 | `IrInt64` | 64-bit signed integer literal / 64 位有符号整数字面量 |
 | `IrString` | string literal / 字符串字面量 |
 | `IrPrint` | builtin print side effect returning Unit / 返回 Unit 的内建 print 副作用 |
 | `IrVariable` | immutable variable reference / 不可变变量引用 |
+| `IrCall` | function call / 函数调用 |
 | `IrUnary` | unary integer operation / 一元整数运算 |
 | `IrBinary` | binary integer operation / 二元整数运算 |
 
@@ -85,6 +88,8 @@ operations.
 | builtin `print(value)` / 内建 `print(value)` | evaluates `value`, appends its text form to output without a newline, and returns `Unit` / 先求值 `value`，把其文本形式无换行追加到输出，并返回 `Unit` |
 | immutable `val` declaration / 不可变 `val` 声明 | evaluates initializer once and binds the name / 对 initializer 求值一次并绑定名字 |
 | identifier reference / 标识符引用 | returns the value bound by an earlier `val` / 返回之前 `val` 绑定的值 |
+| top-level function declaration / 顶层函数声明 | stores a callable body for later calls / 保存可供后续调用的函数体 |
+| function call / 函数调用 | evaluates arguments left-to-right, binds parameters, evaluates the function body, and returns its final expression value / 从左到右求值参数，绑定参数，求值函数体，并返回其最终 expression 值 |
 | grouped expression / 分组表达式 | evaluates the contained expression / 求值内部表达式 |
 | unary `+` / 一元 `+` | returns operand unchanged / 原样返回操作数 |
 | unary `-` / 一元 `-` | returns negated operand / 返回操作数取负 |

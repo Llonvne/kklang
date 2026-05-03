@@ -5,6 +5,8 @@ import cn.llonvne.kklang.frontend.diagnostics.DiagnosticBag
 import cn.llonvne.kklang.frontend.lexing.TokenKinds
 import cn.llonvne.kklang.typechecking.TypedBinary
 import cn.llonvne.kklang.typechecking.TypedExpression
+import cn.llonvne.kklang.typechecking.TypedFunctionCall
+import cn.llonvne.kklang.typechecking.TypedFunctionDeclaration
 import cn.llonvne.kklang.typechecking.TypedGrouped
 import cn.llonvne.kklang.typechecking.TypedInteger
 import cn.llonvne.kklang.typechecking.TypedPrintCall
@@ -53,6 +55,7 @@ class CoreIrLowerer : IrLowerer {
     override fun lower(program: TypedProgram): IrLoweringResult {
         val diagnostics = DiagnosticBag()
         val declarations = program.declarations.mapNotNull { lowerDeclaration(it, diagnostics) }
+        val functions = program.functions.mapNotNull { lowerFunction(it, diagnostics) }
         val expression = lowerExpression(program.expression, diagnostics)
             ?: return IrLoweringResult(program = null, diagnostics = diagnostics.toList())
         val diagnosticsList = diagnostics.toList()
@@ -60,7 +63,7 @@ class CoreIrLowerer : IrLowerer {
             return IrLoweringResult(program = null, diagnostics = diagnosticsList)
         }
         return IrLoweringResult(
-            program = IrProgram(declarations = declarations, expression = expression),
+            program = IrProgram(declarations = declarations, expression = expression, functions = functions),
             diagnostics = diagnosticsList,
         )
     }
@@ -82,6 +85,21 @@ class CoreIrLowerer : IrLowerer {
     }
 
     /**
+     * 降级一个 typed function declaration。
+     * Lowers one typed function declaration.
+     */
+    private fun lowerFunction(declaration: TypedFunctionDeclaration, diagnostics: DiagnosticBag): IrFunctionDeclaration? {
+        val bodyDeclarations = declaration.declarations.mapNotNull { lowerDeclaration(it, diagnostics) }
+        val bodyExpression = lowerExpression(declaration.expression, diagnostics) ?: return null
+        return IrFunctionDeclaration(
+            name = declaration.name,
+            parameters = declaration.parameters.map { it.name },
+            body = IrProgram(declarations = bodyDeclarations, expression = bodyExpression),
+            span = declaration.syntax.span,
+        )
+    }
+
+    /**
      * 按 typed AST expression 类型分派 lowering。
      * Dispatches lowering by typed AST expression type.
      */
@@ -90,6 +108,7 @@ class CoreIrLowerer : IrLowerer {
             is TypedInteger -> lowerInteger(expression, diagnostics)
             is TypedString -> IrString(value = expression.syntax.text, span = expression.syntax.span)
             is TypedPrintCall -> lowerPrintCall(expression, diagnostics)
+            is TypedFunctionCall -> lowerFunctionCall(expression, diagnostics)
             is TypedVariable -> IrVariable(name = expression.symbol.name, span = expression.syntax.span)
             is TypedGrouped -> lowerExpression(expression.inner, diagnostics)
             is TypedPrefix -> lowerPrefix(expression, diagnostics)
@@ -103,6 +122,18 @@ class CoreIrLowerer : IrLowerer {
     private fun lowerPrintCall(expression: TypedPrintCall, diagnostics: DiagnosticBag): IrExpression? {
         val argument = lowerExpression(expression.argument, diagnostics) ?: return null
         return IrPrint(argument = argument, span = expression.syntax.span)
+    }
+
+    /**
+     * 降级函数调用，并传播任一 argument lowering 失败。
+     * Lowers a function call and propagates any argument lowering failure.
+     */
+    private fun lowerFunctionCall(expression: TypedFunctionCall, diagnostics: DiagnosticBag): IrExpression? {
+        val arguments = expression.arguments.mapNotNull { lowerExpression(it, diagnostics) }
+        if (arguments.size != expression.arguments.size) {
+            return null
+        }
+        return IrCall(callee = expression.symbol.name, arguments = arguments, span = expression.syntax.span)
     }
 
     /**

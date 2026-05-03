@@ -34,6 +34,10 @@ class ToolingSpecTest {
             listOf("plus", "minus", "star", "slash", "equals"),
             toolingLanguageSpec.highlightCategories.single { it.category == "operator" }.tokenKinds,
         )
+        assertEquals(
+            listOf("val", "modifier"),
+            toolingLanguageSpec.highlightCategories.single { it.category == "keyword" }.tokenKinds,
+        )
     }
 
     /**

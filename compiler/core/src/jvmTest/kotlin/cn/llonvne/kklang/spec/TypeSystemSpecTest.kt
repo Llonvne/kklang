@@ -18,7 +18,10 @@ class TypeSystemSpecTest {
     @Test
     fun `type system dsl spec records phase and type surface`() {
         assertEquals(listOf("type checking"), minimalTypeSystemSpec.phases)
-        assertEquals(listOf("TypeRef.Int64", "TypeRef.String", "TypeRef.Unit"), minimalTypeSystemSpec.types)
+        assertEquals(
+            listOf("TypeRef.Int64", "TypeRef.String", "TypeRef.Unit", "TypeRef.Function"),
+            minimalTypeSystemSpec.types,
+        )
     }
 
     /**
@@ -31,6 +34,8 @@ class TypeSystemSpecTest {
             listOf(
                 "TypedProgram",
                 "TypedValDeclaration",
+                "TypedFunctionDeclaration",
+                "TypedFunctionParameter",
                 "TypedExpression",
                 "TypedInteger",
                 "TypedString",
@@ -39,6 +44,7 @@ class TypeSystemSpecTest {
                 "TypedGrouped",
                 "TypedPrefix",
                 "TypedBinary",
+                "TypedFunctionCall",
             ),
             minimalTypeSystemSpec.typedNodes,
         )
@@ -53,6 +59,8 @@ class TypeSystemSpecTest {
         assertEquals(
             listOf(
                 "val declaration",
+                "top-level function declaration",
+                "function call",
                 "identifier reference",
                 "integer literal",
                 "string literal",
@@ -81,6 +89,8 @@ class TypeSystemSpecTest {
                 "identifier reference uses bound val type",
                 "TypedValDeclaration preserves BindingSymbol",
                 "TypedVariable preserves BindingSymbol",
+                "parameter type syntax is optional",
+                "function return type is inferred from body",
             ),
             minimalTypeSystemSpec.bindingRules,
         )

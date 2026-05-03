@@ -12,12 +12,28 @@ sealed interface Expression {
 }
 
 /**
- * 当前 AST program，包含不可变 val declarations 和最终 expression。
- * Current AST program containing immutable val declarations and a final expression.
+ * AST 中可出现在 program 顶层的 declaration 共同接口。
+ * Shared interface for declarations that may appear at the top level of an AST program.
+ */
+sealed interface Declaration {
+    val span: SourceSpan
+}
+
+/**
+ * 可被 binding symbol 指向的语法来源。
+ * Syntax source that may be referenced by a binding symbol.
+ */
+sealed interface SymbolSyntax {
+    val span: SourceSpan
+}
+
+/**
+ * 当前 AST program，包含 declarations 和最终 expression。
+ * Current AST program containing declarations and a final expression.
  */
 data class AstProgram(
     val expression: Expression,
-    val declarations: List<ValDeclaration> = emptyList(),
+    val declarations: List<Declaration> = emptyList(),
 ) {
     val span: SourceSpan
         get() {
@@ -40,12 +56,104 @@ data class ValDeclaration(
     val equalsToken: Token,
     val initializer: Expression,
     val semicolonToken: Token,
-) {
+) : Declaration, SymbolSyntax {
     val name: String
         get() = nameToken.lexeme
 
-    val span: SourceSpan
+    override val span: SourceSpan
         get() = valToken.span.covering(semicolonToken.span)
+}
+
+/**
+ * modifier declaration AST 节点，保留 outer braces 内的 pattern tokens。
+ * AST node for a modifier declaration, preserving pattern tokens inside the outer braces.
+ */
+data class ModifierDeclaration(
+    val modifierToken: Token,
+    val nameToken: Token,
+    val leftBraceToken: Token,
+    val patternTokens: List<Token>,
+    val rightBraceToken: Token,
+) : Declaration {
+    val name: String
+        get() = nameToken.lexeme
+
+    override val span: SourceSpan
+        get() = modifierToken.span.covering(rightBraceToken.span)
+}
+
+/**
+ * raw modifier application，parser 只保留完整 token 序列，后续 expansion 再解释。
+ * Raw modifier application where the parser only preserves the full token sequence and later expansion interprets it.
+ */
+data class RawModifierApplication(
+    val nameToken: Token,
+    val tokens: List<Token>,
+) : Declaration {
+    init {
+        require(tokens.isNotEmpty()) { "raw modifier application requires at least one token" }
+    }
+
+    val name: String
+        get() = nameToken.lexeme
+
+    override val span: SourceSpan
+        get() = tokens.first().span.covering(tokens.last().span)
+}
+
+/**
+ * 函数参数语法，类型注解在语法上可为空。
+ * Function parameter syntax whose type annotation may be absent syntactically.
+ */
+data class FunctionParameter(
+    val nameToken: Token,
+    val colonToken: Token?,
+    val typeToken: Token?,
+) : SymbolSyntax {
+    val name: String
+        get() = nameToken.lexeme
+
+    val typeName: String?
+        get() = typeToken?.lexeme
+
+    override val span: SourceSpan
+        get() = if (typeToken == null) nameToken.span else nameToken.span.covering(typeToken.span)
+}
+
+/**
+ * 函数体 block program，包含局部 val declarations 和最终 expression。
+ * Function-body block program containing local val declarations and a final expression.
+ */
+data class FunctionBody(
+    val leftBraceToken: Token,
+    val declarations: List<ValDeclaration>,
+    val expression: Expression,
+    val rightBraceToken: Token,
+) {
+    val span: SourceSpan
+        get() = leftBraceToken.span.covering(rightBraceToken.span)
+}
+
+/**
+ * `fn` modifier expansion 后的结构化函数声明。
+ * Structured function declaration produced after `fn` modifier expansion.
+ */
+data class FunctionDeclaration(
+    val modifierToken: Token,
+    val nameToken: Token,
+    val leftParenToken: Token,
+    val parameters: List<FunctionParameter>,
+    val rightParenToken: Token,
+    val body: FunctionBody,
+) : Declaration, SymbolSyntax {
+    val modifierName: String
+        get() = modifierToken.lexeme
+
+    val name: String
+        get() = nameToken.lexeme
+
+    override val span: SourceSpan
+        get() = modifierToken.span.covering(body.rightBraceToken.span)
 }
 
 /**
@@ -91,9 +199,19 @@ data class StringExpression(val token: Token) : Expression {
 data class CallExpression(
     val callee: IdentifierExpression,
     val leftParen: Token,
-    val argument: Expression,
+    val arguments: List<Expression>,
     val rightParen: Token,
 ) : Expression {
+    constructor(
+        callee: IdentifierExpression,
+        leftParen: Token,
+        argument: Expression,
+        rightParen: Token,
+    ) : this(callee, leftParen, listOf(argument), rightParen)
+
+    val argument: Expression
+        get() = arguments.single()
+
     override val span: SourceSpan =
         callee.span.covering(rightParen.span)
 }

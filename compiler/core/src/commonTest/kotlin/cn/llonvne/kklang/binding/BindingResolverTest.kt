@@ -6,6 +6,7 @@ import cn.llonvne.kklang.frontend.lexing.Lexer
 import cn.llonvne.kklang.frontend.parsing.AstProgram
 import cn.llonvne.kklang.frontend.parsing.MissingExpression
 import cn.llonvne.kklang.frontend.parsing.Parser
+import cn.llonvne.kklang.metaprogramming.SeedModifierExpander
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -85,6 +86,24 @@ class BindingResolverTest {
     }
 
     /**
+     * 验证 binding resolver 绑定 modifier expansion 后的函数、参数和函数调用。
+     * Verifies that the binding resolver binds functions, parameters, and function calls after modifier expansion.
+     */
+    @Test
+    fun `binding resolver binds function declarations and calls`() {
+        val result = resolveExpanded("fn add(a: Int, b: Int) { val c = a + b; c } add(1, 2)")
+
+        assertFalse(result.hasErrors)
+        val program = requireNotNull(result.program)
+        val function = program.functions.single()
+        assertEquals("add", function.name)
+        assertEquals(listOf("a", "b"), function.parameters.map { it.name })
+        assertEquals("binary(+, variable(a -> a), variable(b -> b))", function.body.declarations.single().initializer.render())
+        assertEquals("call(add, int64, int64)", program.expression.render())
+        assertEquals(listOf("add"), program.symbols.map { it.name })
+    }
+
+    /**
      * 验证所有当前 bound expression 节点的 span 都委托给原始 syntax。
      * Verifies that every current bound expression node delegates span to original syntax.
      */
@@ -99,11 +118,13 @@ class BindingResolverTest {
         val innerGrouped = assertIs<BoundGrouped>(binary.right)
         val string = assertIs<BoundString>(requireNotNull(resolve("\"hello\"").program).expression)
         val print = assertIs<BoundPrintCall>(requireNotNull(resolve("print(\"hello\")").program).expression)
+        val call = assertIs<BoundFunctionCall>(requireNotNull(resolveExpanded("fn one() { 1 } one()").program).expression)
         val missing = BoundMissing(MissingExpression(SourceSpan("sample.kk", 0, 0)))
         val nodes: List<BoundExpression> = listOf(
             integer,
             string,
             print,
+            call,
             prefix,
             outerGrouped,
             binary,
@@ -133,6 +154,8 @@ class BindingResolverTest {
         assertDiagnosticCodes("val x = 1; missing + x", "TYPE001")
         assertDiagnosticCodes("unknown(1)", "TYPE001")
         assertDiagnosticCodes("print(missing)", "TYPE001")
+        assertExpandedDiagnosticCodes("fn self() { self() } self()", "TYPE001", "TYPE001")
+        assertExpandedDiagnosticCodes("fn first() { later() } fn later() { 1 } first()", "TYPE001", "TYPE001")
     }
 
     /**
@@ -146,6 +169,40 @@ class BindingResolverTest {
         assertTrue(result.hasErrors)
         assertNull(result.program)
         assertEquals(listOf("BIND001"), result.diagnostics.map { it.code })
+    }
+
+    /**
+     * 验证重复函数和重复参数名都会产生 BIND001。
+     * Verifies that duplicate functions and duplicate parameter names both produce BIND001.
+     */
+    @Test
+    fun `binding resolver rejects duplicate functions and parameters`() {
+        assertExpandedDiagnosticCodes("fn same() { 1 } fn same() { 2 } same()", "BIND001")
+        assertExpandedDiagnosticCodes("fn bad(a: Int, a: Int) { a } 0", "BIND001")
+    }
+
+    /**
+     * 验证未展开的 modifier 节点不能进入 binding 阶段。
+     * Verifies that unexpanded modifier nodes cannot enter the binding phase.
+     */
+    @Test
+    fun `binding resolver rejects unexpanded modifier nodes`() {
+        val modifierResult = resolve("modifier fn { [modifiers] fn [identifier]([identifier:type?]) { [body] } } 0")
+        val rawResult = resolve("decorated thing { 1 } 0")
+
+        assertTrue(modifierResult.hasErrors)
+        assertEquals(listOf("BIND001"), modifierResult.diagnostics.map { it.code })
+        assertTrue(rawResult.hasErrors)
+        assertEquals(listOf("BIND001"), rawResult.diagnostics.map { it.code })
+    }
+
+    /**
+     * 验证函数体内局部 val initializer 失败会阻止函数绑定。
+     * Verifies that a failing local val initializer inside a function body blocks function binding.
+     */
+    @Test
+    fun `binding resolver reports function local declaration failures`() {
+        assertExpandedDiagnosticCodes("fn bad(a: Int) { val x = missing; 1 } 0", "TYPE001")
     }
 
     /**
@@ -172,11 +229,30 @@ class BindingResolverTest {
         SeedBindingResolver().resolve(parseProgram(text))
 
     /**
+     * 先执行 modifier expansion，再 binding 一个测试 program。
+     * Runs modifier expansion first, then binds one test program.
+     */
+    private fun resolveExpanded(text: String): BindingResult =
+        SeedBindingResolver().resolve(expandProgram(text))
+
+    /**
      * 断言 binding 失败并产生指定 diagnostics。
      * Asserts that binding fails with the specified diagnostics.
      */
     private fun assertDiagnosticCodes(text: String, vararg codes: String) {
         val result = resolve(text)
+
+        assertTrue(result.hasErrors)
+        assertNull(result.program)
+        assertEquals(codes.toList(), result.diagnostics.map { it.code })
+    }
+
+    /**
+     * 断言 expansion 后的 binding 失败并产生指定 diagnostics。
+     * Asserts that binding after expansion fails with the specified diagnostics.
+     */
+    private fun assertExpandedDiagnosticCodes(text: String, vararg codes: String) {
+        val result = resolveExpanded(text)
 
         assertTrue(result.hasErrors)
         assertNull(result.program)
@@ -191,6 +267,13 @@ class BindingResolverTest {
         Parser(Lexer().tokenize(SourceText.of("sample.kk", text)).tokens)
             .parseProgramDocument()
             .program
+
+    /**
+     * 使用默认 parser 和 modifier expander 构造 expanded AST program。
+     * Builds an expanded AST program with the default parser and modifier expander.
+     */
+    private fun expandProgram(text: String): AstProgram =
+        requireNotNull(SeedModifierExpander().expand(parseProgram(text)).program)
 }
 
 /**
@@ -202,6 +285,7 @@ private fun BoundExpression.render(): String =
         is BoundInteger -> "int64"
         is BoundString -> "string(${syntax.text})"
         is BoundPrintCall -> "print(${argument.render()})"
+        is BoundFunctionCall -> "call(${symbol.name}, ${arguments.joinToString { it.render() }})"
         is BoundVariable -> "variable(${syntax.name} -> ${symbol.name})"
         is BoundGrouped -> "grouped(${inner.render()})"
         is BoundPrefix -> "prefix(${syntax.operator.lexeme}, ${operand.render()})"
