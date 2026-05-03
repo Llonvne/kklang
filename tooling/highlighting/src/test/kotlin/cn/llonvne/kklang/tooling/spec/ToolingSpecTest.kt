@@ -27,7 +27,7 @@ class ToolingSpecTest {
     @Test
     fun `kotlin dsl spec records highlight categories`() {
         assertEquals(
-            listOf("keyword", "identifier", "integer", "operator", "delimiter", "whitespace", "unknown", "eof"),
+            listOf("keyword", "identifier", "integer", "string", "operator", "delimiter", "whitespace", "unknown", "eof"),
             toolingLanguageSpec.highlightCategories.map { it.category },
         )
         assertEquals(

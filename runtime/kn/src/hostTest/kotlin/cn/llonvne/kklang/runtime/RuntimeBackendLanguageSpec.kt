@@ -7,9 +7,11 @@ package cn.llonvne.kklang.runtime
 data class RuntimeBackendSpec(
     val name: String,
     val engineTypes: List<String>,
+    val executableTypes: List<String>,
     val valueTypes: List<String>,
     val materializers: List<String>,
     val failureSources: List<String>,
+    val debugCommands: List<String>,
 )
 
 /**
@@ -25,9 +27,11 @@ fun runtimeBackendSpec(name: String, block: RuntimeBackendSpecBuilder.() -> Unit
  */
 class RuntimeBackendSpecBuilder(private val name: String) {
     private val engineTypes = mutableListOf<String>()
+    private val executableTypes = mutableListOf<String>()
     private val valueTypes = mutableListOf<String>()
     private val materializers = mutableListOf<String>()
     private val failureSources = mutableListOf<String>()
+    private val debugCommands = mutableListOf<String>()
 
     /**
      * 记录一个 backend engine/result 类型。
@@ -35,6 +39,14 @@ class RuntimeBackendSpecBuilder(private val name: String) {
      */
     fun engineType(name: String) {
         engineTypes += name
+    }
+
+    /**
+     * 记录一个 Native executable/runner 类型。
+     * Records one Native executable or runner type.
+     */
+    fun executableType(name: String) {
+        executableTypes += name
     }
 
     /**
@@ -62,6 +74,14 @@ class RuntimeBackendSpecBuilder(private val name: String) {
     }
 
     /**
+     * 记录一个 runtime 调试命令任务。
+     * Records one runtime debug command task.
+     */
+    fun debugCommand(name: String) {
+        debugCommands += name
+    }
+
+    /**
      * 构造不可变 Native runtime backend 规范。
      * Builds the immutable Native runtime backend spec.
      */
@@ -69,9 +89,11 @@ class RuntimeBackendSpecBuilder(private val name: String) {
         RuntimeBackendSpec(
             name = name,
             engineTypes = engineTypes.toList(),
+            executableTypes = executableTypes.toList(),
             valueTypes = valueTypes.toList(),
             materializers = materializers.toList(),
             failureSources = failureSources.toList(),
+            debugCommands = debugCommands.toList(),
         )
 }
 
@@ -79,11 +101,22 @@ val minimalRuntimeBackendSpec = runtimeBackendSpec("minimal-native-runtime-backe
     engineType("KkRuntimeExecutionEngine")
     engineType("KkRuntimeExecutionResult")
 
-    valueType("KkValue")
-    valueType("KkValue.Int64")
+    executableType("KkNativeSingleFileRunner")
+    executableType("KkNativeProcessResult")
+    executableType("kkrun")
 
+    valueType("KkValue")
+    valueType("KkValue.Unit")
+    valueType("KkValue.Int64")
+    valueType("KkValue.String")
+
+    materializer("kk_value_unit")
     materializer("kk_value_int64")
+    materializer("kk_value_string")
 
     failureSource("compiler diagnostics")
     failureSource("evaluator diagnostics")
+
+    debugCommand("printRuntimeHostDebugCommand")
+    debugCommand("printRuntimeSingleFileDebugCommand")
 }

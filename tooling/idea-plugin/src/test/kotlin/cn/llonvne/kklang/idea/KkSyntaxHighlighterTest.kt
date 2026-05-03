@@ -19,7 +19,7 @@ class KkSyntaxHighlighterTest {
     @Test
     fun `idea lexer emits token types from shared classification`() {
         val lexer = KkIdeaLexer()
-        lexer.start("val x = 1;\n@", 0, 12, 0)
+        lexer.start("val x = \"s\";\n@", 0, 14, 0)
 
         val types = mutableListOf<IElementType>()
         while (lexer.tokenType != null) {
@@ -35,18 +35,18 @@ class KkSyntaxHighlighterTest {
                 KkTokenTypes.WHITESPACE,
                 KkTokenTypes.OPERATOR,
                 KkTokenTypes.WHITESPACE,
-                KkTokenTypes.INTEGER,
+                KkTokenTypes.STRING,
                 KkTokenTypes.DELIMITER,
                 KkTokenTypes.WHITESPACE,
                 KkTokenTypes.UNKNOWN,
             ),
             types,
         )
-        assertEquals(12, lexer.bufferEnd)
-        assertEquals("val x = 1;\n@", lexer.bufferSequence.toString())
+        assertEquals(14, lexer.bufferEnd)
+        assertEquals("val x = \"s\";\n@", lexer.bufferSequence.toString())
         assertEquals(0, lexer.state)
-        assertEquals(12, lexer.tokenStart)
-        assertEquals(12, lexer.tokenEnd)
+        assertEquals(14, lexer.tokenStart)
+        assertEquals(14, lexer.tokenEnd)
     }
 
     /**
@@ -75,6 +75,7 @@ class KkSyntaxHighlighterTest {
         assertTrue(highlighter.getTokenHighlights(KkTokenTypes.KEYWORD).isNotEmpty())
         assertTrue(highlighter.getTokenHighlights(KkTokenTypes.IDENTIFIER).isNotEmpty())
         assertTrue(highlighter.getTokenHighlights(KkTokenTypes.INTEGER).isNotEmpty())
+        assertTrue(highlighter.getTokenHighlights(KkTokenTypes.STRING).isNotEmpty())
         assertTrue(highlighter.getTokenHighlights(KkTokenTypes.OPERATOR).isNotEmpty())
         assertTrue(highlighter.getTokenHighlights(KkTokenTypes.DELIMITER).isNotEmpty())
         assertTrue(highlighter.getTokenHighlights(KkTokenTypes.UNKNOWN).isNotEmpty())
@@ -84,6 +85,7 @@ class KkSyntaxHighlighterTest {
         assertSame(KkSyntaxHighlighter.KEYWORD, highlighter.getTokenHighlights(KkTokenTypes.KEYWORD).single())
         assertSame(KkSyntaxHighlighter.IDENTIFIER, highlighter.getTokenHighlights(KkTokenTypes.IDENTIFIER).single())
         assertSame(KkSyntaxHighlighter.INTEGER, highlighter.getTokenHighlights(KkTokenTypes.INTEGER).single())
+        assertSame(KkSyntaxHighlighter.STRING, highlighter.getTokenHighlights(KkTokenTypes.STRING).single())
         assertSame(KkSyntaxHighlighter.OPERATOR, highlighter.getTokenHighlights(KkTokenTypes.OPERATOR).single())
         assertSame(KkSyntaxHighlighter.DELIMITER, highlighter.getTokenHighlights(KkTokenTypes.DELIMITER).single())
         assertSame(KkSyntaxHighlighter.UNKNOWN, highlighter.getTokenHighlights(KkTokenTypes.UNKNOWN).single())
@@ -98,6 +100,7 @@ class KkSyntaxHighlighterTest {
         assertEquals(KkTokenTypes.KEYWORD, KkIdeaTokenTypeMapper.ideaTokenType(KkHighlightTokenCategory.Keyword))
         assertEquals(KkTokenTypes.IDENTIFIER, KkIdeaTokenTypeMapper.ideaTokenType(KkHighlightTokenCategory.Identifier))
         assertEquals(KkTokenTypes.INTEGER, KkIdeaTokenTypeMapper.ideaTokenType(KkHighlightTokenCategory.Integer))
+        assertEquals(KkTokenTypes.STRING, KkIdeaTokenTypeMapper.ideaTokenType(KkHighlightTokenCategory.String))
         assertEquals(KkTokenTypes.OPERATOR, KkIdeaTokenTypeMapper.ideaTokenType(KkHighlightTokenCategory.Operator))
         assertEquals(KkTokenTypes.DELIMITER, KkIdeaTokenTypeMapper.ideaTokenType(KkHighlightTokenCategory.Delimiter))
         assertEquals(KkTokenTypes.WHITESPACE, KkIdeaTokenTypeMapper.ideaTokenType(KkHighlightTokenCategory.Whitespace))

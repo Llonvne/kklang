@@ -46,7 +46,7 @@ class KkParserDefinitionTest {
         assertSame(KkElementTypes.FILE, definition.fileNodeType)
         assertTrue(definition.whitespaceTokens.contains(KkTokenTypes.WHITESPACE))
         assertSame(TokenSet.EMPTY, definition.commentTokens)
-        assertSame(TokenSet.EMPTY, definition.stringLiteralElements)
+        assertTrue(definition.stringLiteralElements.contains(KkTokenTypes.STRING))
     }
 
     /**

@@ -31,6 +31,30 @@ class ParserTest {
     }
 
     /**
+     * 验证 parser 把字符串 token 解析为字符串字面量表达式。
+     * Verifies that the parser parses string tokens as string-literal expressions.
+     */
+    @Test
+    fun `parser handles string literals`() {
+        val result = parse("\"hello\"")
+
+        assertFalse(result.hasErrors)
+        assertEquals("string(hello)", result.expression.render())
+    }
+
+    /**
+     * 验证 parser 支持内建调用表达式并保持调用优先级高于整数运算。
+     * Verifies that the parser supports builtin call expressions and keeps calls above integer operators.
+     */
+    @Test
+    fun `parser handles builtin call expressions`() {
+        val result = parse("-print(1 + 2) * 3")
+
+        assertFalse(result.hasErrors)
+        assertEquals("(* (- call(print, (+ int(1) int(2)))) int(3))", result.expression.render())
+    }
+
+    /**
      * 验证 AstProgram 会暴露根 expression 的 span。
      * Verifies that AstProgram exposes the root expression span.
      */
@@ -128,6 +152,19 @@ class ParserTest {
     }
 
     /**
+     * 验证 call expression 缺失右括号会产生 PARSE003。
+     * Verifies that a call expression missing the right parenthesis produces PARSE003.
+     */
+    @Test
+    fun `parser reports missing call right paren`() {
+        val result = parse("print(1 + 2")
+
+        assertTrue(result.hasErrors)
+        assertEquals("call(print, (+ int(1) int(2)))", result.expression.render())
+        assertEquals(listOf("PARSE003"), result.diagnostics.map { it.code })
+    }
+
+    /**
      * 验证缺失右 operand 会产生 missing expression。
      * Verifies that a missing right operand produces a missing expression.
      */
@@ -157,6 +194,26 @@ class ParserTest {
 
         assertFalse(result.hasErrors)
         assertEquals("(^ id(a) (^ id(b) id(c)))", result.expression.render())
+    }
+
+    /**
+     * 验证高于 call 的自定义 infix binding power 会阻止右 operand 中的 call 后缀解析。
+     * Verifies that custom infix binding power above calls prevents call postfix parsing in the right operand.
+     */
+    @Test
+    fun `parser keeps call postfix below higher custom binding power`() {
+        val caret = TokenKind("caret")
+        val lexerConfig = LexerConfig.default().withRule(LexerRule.literal("caret", caret, "^"))
+        val parserConfig = ParserConfig.default().withInfix(
+            caret,
+            InfixParselet.binary(precedence = 50, associativity = Associativity.Left),
+        )
+
+        val result = parse("a ^ b(1)", lexerConfig, parserConfig)
+
+        assertTrue(result.hasErrors)
+        assertEquals("(^ id(a) id(b))", result.expression.render())
+        assertEquals(listOf("PARSE002", "PARSE002", "PARSE002"), result.diagnostics.map { it.code })
     }
 
     /**
@@ -235,6 +292,8 @@ private fun Expression.render(): String =
     when (this) {
         is IdentifierExpression -> "id($name)"
         is IntegerExpression -> "int($digits)"
+        is StringExpression -> "string($text)"
+        is CallExpression -> "call(${callee.name}, ${argument.render()})"
         is PrefixExpression -> "(${operator.lexeme} ${operand.render()})"
         is BinaryExpression -> "(${operator.lexeme} ${left.render()} ${right.render()})"
         is GroupedExpression -> "(group ${expression.render()})"

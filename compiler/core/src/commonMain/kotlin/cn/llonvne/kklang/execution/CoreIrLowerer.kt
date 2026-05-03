@@ -7,8 +7,10 @@ import cn.llonvne.kklang.typechecking.TypedBinary
 import cn.llonvne.kklang.typechecking.TypedExpression
 import cn.llonvne.kklang.typechecking.TypedGrouped
 import cn.llonvne.kklang.typechecking.TypedInteger
+import cn.llonvne.kklang.typechecking.TypedPrintCall
 import cn.llonvne.kklang.typechecking.TypedPrefix
 import cn.llonvne.kklang.typechecking.TypedProgram
+import cn.llonvne.kklang.typechecking.TypedString
 import cn.llonvne.kklang.typechecking.TypedValDeclaration
 import cn.llonvne.kklang.typechecking.TypedVariable
 
@@ -86,11 +88,22 @@ class CoreIrLowerer : IrLowerer {
     private fun lowerExpression(expression: TypedExpression, diagnostics: DiagnosticBag): IrExpression? =
         when (expression) {
             is TypedInteger -> lowerInteger(expression, diagnostics)
+            is TypedString -> IrString(value = expression.syntax.text, span = expression.syntax.span)
+            is TypedPrintCall -> lowerPrintCall(expression, diagnostics)
             is TypedVariable -> IrVariable(name = expression.symbol.name, span = expression.syntax.span)
             is TypedGrouped -> lowerExpression(expression.inner, diagnostics)
             is TypedPrefix -> lowerPrefix(expression, diagnostics)
             is TypedBinary -> lowerBinary(expression, diagnostics)
         }
+
+    /**
+     * 降级内建 print 调用，并传播 argument lowering 失败。
+     * Lowers a builtin print call and propagates argument lowering failures.
+     */
+    private fun lowerPrintCall(expression: TypedPrintCall, diagnostics: DiagnosticBag): IrExpression? {
+        val argument = lowerExpression(expression.argument, diagnostics) ?: return null
+        return IrPrint(argument = argument, span = expression.syntax.span)
+    }
 
     /**
      * 将整数字面量文本转换为 Int64 IR，超出范围时报告 EXEC003。

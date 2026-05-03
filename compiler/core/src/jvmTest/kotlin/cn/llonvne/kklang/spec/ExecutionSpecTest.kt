@@ -30,7 +30,16 @@ class ExecutionSpecTest {
     @Test
     fun `execution dsl spec records first core ir surface`() {
         assertEquals(
-            listOf("IrProgram", "IrValDeclaration", "IrInt64", "IrVariable", "IrUnary", "IrBinary"),
+            listOf(
+                "IrProgram",
+                "IrValDeclaration",
+                "IrInt64",
+                "IrString",
+                "IrPrint",
+                "IrVariable",
+                "IrUnary",
+                "IrBinary",
+            ),
             minimalExecutionSpec.irNodes,
         )
     }
@@ -46,6 +55,8 @@ class ExecutionSpecTest {
                 "immutable val declaration",
                 "identifier reference",
                 "integer literal",
+                "string literal",
+                "builtin print call",
                 "grouped expression",
                 "unary plus",
                 "unary minus",

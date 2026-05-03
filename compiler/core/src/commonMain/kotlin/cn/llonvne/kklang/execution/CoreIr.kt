@@ -49,6 +49,24 @@ data class IrInt64(
 ) : IrExpression
 
 /**
+ * 字符串字面量的 Core IR 节点。
+ * Core IR node for a string literal.
+ */
+data class IrString(
+    val value: String,
+    override val span: SourceSpan,
+) : IrExpression
+
+/**
+ * 内建 print 调用的 Core IR 节点。
+ * Core IR node for a builtin print call.
+ */
+data class IrPrint(
+    val argument: IrExpression,
+    override val span: SourceSpan,
+) : IrExpression
+
+/**
  * 不可变变量引用的 Core IR 节点。
  * Core IR node for an immutable variable reference.
  */

@@ -19,7 +19,7 @@ class KkSyntaxClassifierTest {
      */
     @Test
     fun `classifier maps visible tokens and omits trivia by default`() {
-        val tokens = KkSyntaxClassifier().classify(SourceText.of("sample.kk", "val x = (1 + 2); x"))
+        val tokens = KkSyntaxClassifier().classify(SourceText.of("sample.kk", "val x = (1 + 2); \"s\""))
 
         assertEquals(
             listOf(
@@ -32,11 +32,11 @@ class KkSyntaxClassifierTest {
                 KkHighlightTokenCategory.Integer,
                 KkHighlightTokenCategory.Delimiter,
                 KkHighlightTokenCategory.Delimiter,
-                KkHighlightTokenCategory.Identifier,
+                KkHighlightTokenCategory.String,
             ),
             tokens.map { it.category },
         )
-        assertEquals(listOf("val", "x", "=", "(", "1", "+", "2", ")", ";", "x"), tokens.map { it.lexeme })
+        assertEquals(listOf("val", "x", "=", "(", "1", "+", "2", ")", ";", "\"s\""), tokens.map { it.lexeme })
         assertEquals(KkHighlightToken(KkHighlightTokenCategory.Keyword, "val", 0, 3), tokens.first())
     }
 

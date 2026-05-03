@@ -111,6 +111,14 @@ value.
 The current `KkValue.Int64` must be materialized through the C ABI
 `kk_value_int64`.
 
+当前 `KkValue.Unit` 必须通过 C ABI `kk_value_unit` materialize。
+The current `KkValue.Unit` must be materialized through the C ABI
+`kk_value_unit`.
+
+当前 `KkValue.String` 必须通过 C ABI `kk_value_string` materialize，并拥有它所需的 runtime string 资源。
+The current `KkValue.String` must be materialized through the C ABI
+`kk_value_string` and own the runtime string resource it needs.
+
 `close()` 是幂等的。第一次调用释放底层 C 资源，后续调用不再调用 C ABI。
 `close()` is idempotent. The first call releases the underlying C resource, and
 later calls do not call the C ABI again.
@@ -142,9 +150,53 @@ return evaluator diagnostics.
 If evaluation succeeds and produces `ExecutionValue.Int64`, the backend must
 return `KkRuntimeExecutionResult.Success(KkValue.Int64)`.
 
+如果求值成功并产生 `ExecutionValue.String`，backend 必须通过 C runtime 字符串和 `kk_value_string` 返回 `KkRuntimeExecutionResult.Success(KkValue.String)`。
+If evaluation succeeds and produces `ExecutionValue.String`, the backend must
+return `KkRuntimeExecutionResult.Success(KkValue.String)` through a C runtime
+string and `kk_value_string`.
+
+如果求值成功并产生 `ExecutionValue.Unit`，backend 必须通过 `kk_value_unit` 返回 `KkRuntimeExecutionResult.Success(KkValue.Unit)`。
+If evaluation succeeds and produces `ExecutionValue.Unit`, the backend must
+return `KkRuntimeExecutionResult.Success(KkValue.Unit)` through
+`kk_value_unit`.
+
+backend 必须保留 Core IR evaluator 产生的输出文本，并把它暴露在 `KkRuntimeExecutionResult` 上。
+The backend must preserve output text produced by the Core IR evaluator and
+expose it on `KkRuntimeExecutionResult`.
+
 Native runtime backend 不定义新的语言语义，也不把算术语义下沉到 C runtime。
 The Native runtime backend does not define new language semantics and does not
 move arithmetic semantics into the C runtime.
+
+## Native Single-File Executable / Native 单文件可执行程序
+
+`KkNativeSingleFileRunner` 是第一版 Native 单文件执行入口，产物可执行文件名为 `kkrun`。
+`KkNativeSingleFileRunner` is the first Native single-file execution entry
+point, and the produced executable name is `kkrun`.
+
+`KkNativeProcessResult` 表示 Native runner 的进程级结果，包含 exit code、stdout 和 stderr。
+`KkNativeProcessResult` represents the process-level result of the Native
+runner and contains exit code, stdout, and stderr.
+
+`kkrun` 必须接受且只接受一个 `.kk` 文件路径。
+`kkrun` must accept exactly one `.kk` file path.
+
+参数数量错误或文件扩展名不是 `.kk` 时，runner 必须返回 exit code `64` 并把用法或错误写入 stderr。
+When the argument count is wrong or the file extension is not `.kk`, the runner
+must return exit code `64` and write the usage or error to stderr.
+
+读取源码文件失败时，runner 必须返回 exit code `66` 并把文件读取错误写入 stderr。
+When reading the source file fails, the runner must return exit code `66` and
+write the file-read error to stderr.
+
+编译或执行诊断失败时，runner 必须返回 exit code `1`，保留已经产生的语言 stdout，并把 diagnostic code/message 写入 stderr。
+When compilation or execution fails with diagnostics, the runner must return
+exit code `1`, preserve already-produced language stdout, and write diagnostic
+code/message pairs to stderr.
+
+执行成功时，runner 必须返回 exit code `0`，保留语言 stdout，并追加 `Result: ...` 行显示最终 runtime value。
+When execution succeeds, the runner must return exit code `0`, preserve
+language stdout, and append a `Result: ...` line for the final runtime value.
 
 ## Runtime Debuggability / 运行时可调试性
 
@@ -167,6 +219,11 @@ runtime source、C runtime debug object 和最小 LLDB 命令。
 `printRuntimeHostDebugCommand` must print the Kotlin/Native host test
 executable, C runtime source, C runtime debug object, and the minimal LLDB
 commands.
+
+`printRuntimeSingleFileDebugCommand` 必须打印 `kkrun` debug executable、调试源码路径、C runtime source、C runtime debug object 和最小 LLDB 命令。
+`printRuntimeSingleFileDebugCommand` must print the `kkrun` debug executable,
+debug source path, C runtime source, C runtime debug object, and the minimal
+LLDB commands.
 
 在设置 C 源码断点前，调试命令必须先通过 `target modules add` 加载 C runtime
 debug object。

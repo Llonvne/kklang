@@ -38,6 +38,29 @@ class ExecutionEngineTest {
     }
 
     /**
+     * 验证 execution engine 可以执行字符串字面量和字符串 val 引用。
+     * Verifies that the execution engine can execute string literals and string val references.
+     */
+    @Test
+    fun `engine executes string literals and string vals`() {
+        assertEquals(ExecutionValue.String("hello"), executeValue("\"hello\""))
+        assertEquals(ExecutionValue.String("hello"), executeValue("val text = \"hello\"; text"))
+    }
+
+    /**
+     * 验证 execution engine 执行 print、暴露输出并返回 Unit。
+     * Verifies that the execution engine executes print, exposes output, and returns Unit.
+     */
+    @Test
+    fun `engine executes builtin print and exposes output`() {
+        val result = ExecutionEngine().execute(SourceText.of("sample.kk", "val text = \"hello\"; print(text)"))
+
+        assertIs<ExecutionResult.Success>(result)
+        assertEquals(ExecutionValue.Unit, result.value)
+        assertEquals("hello", result.output)
+    }
+
+    /**
      * 验证分组、前缀、除法和零乘法的成功执行路径。
      * Verifies successful execution paths for grouping, prefix operators, division, and multiplication by zero.
      */
@@ -90,6 +113,7 @@ class ExecutionEngineTest {
         assertTrue(failure.hasErrors)
         assertIs<ExecutionResult.Success>(success)
         assertFalse(success.hasErrors)
+        assertEquals("", success.output)
     }
 
     /**
@@ -104,11 +128,11 @@ class ExecutionEngineTest {
 
         assertEquals(
             listOf("EXEC001"),
-            failureCodes(ExecutionEngine(evaluator = IrEvaluator { EvaluationResult(null, listOf(diagnostic)) }), source),
+            failureCodes(ExecutionEngine(evaluator = IrEvaluator { EvaluationResult(null, listOf(diagnostic), "partial") }), source),
         )
         assertEquals(
             listOf("EXEC001"),
-            failureCodes(ExecutionEngine(evaluator = IrEvaluator { EvaluationResult(value, listOf(diagnostic)) }), source),
+            failureCodes(ExecutionEngine(evaluator = IrEvaluator { EvaluationResult(value, listOf(diagnostic), "partial") }), source),
         )
     }
 
@@ -139,6 +163,7 @@ class ExecutionEngineTest {
     private fun failureCodes(engine: ExecutionEngine, source: SourceText): List<String> {
         val result = engine.execute(source)
         assertIs<ExecutionResult.Failure>(result)
+        assertEquals("partial", result.output)
         return result.diagnostics.map { it.code }
     }
 

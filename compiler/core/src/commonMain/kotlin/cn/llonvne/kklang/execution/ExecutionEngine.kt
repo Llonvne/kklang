@@ -27,12 +27,12 @@ class ExecutionEngine(
         val evaluationResult = evaluator.evaluate(program.ir)
         val value = evaluationResult.value
         if (value == null) {
-            return ExecutionResult.Failure(evaluationResult.diagnostics)
+            return ExecutionResult.Failure(evaluationResult.diagnostics, evaluationResult.output)
         }
         if (evaluationResult.hasErrors) {
-            return ExecutionResult.Failure(evaluationResult.diagnostics)
+            return ExecutionResult.Failure(evaluationResult.diagnostics, evaluationResult.output)
         }
 
-        return ExecutionResult.Success(value)
+        return ExecutionResult.Success(value, evaluationResult.output)
     }
 }

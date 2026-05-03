@@ -15,6 +15,7 @@ enum class KkHighlightTokenCategory {
     Keyword,
     Identifier,
     Integer,
+    String,
     Operator,
     Delimiter,
     Whitespace,
@@ -79,6 +80,7 @@ class KkSyntaxClassifier(
             TokenKinds.Val -> KkHighlightTokenCategory.Keyword
             TokenKinds.Identifier -> KkHighlightTokenCategory.Identifier
             TokenKinds.Integer -> KkHighlightTokenCategory.Integer
+            TokenKinds.String -> KkHighlightTokenCategory.String
             TokenKinds.Plus,
             TokenKinds.Minus,
             TokenKinds.Star,

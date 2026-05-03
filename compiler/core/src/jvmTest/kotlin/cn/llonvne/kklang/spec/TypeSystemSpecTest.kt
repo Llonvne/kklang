@@ -18,7 +18,7 @@ class TypeSystemSpecTest {
     @Test
     fun `type system dsl spec records phase and type surface`() {
         assertEquals(listOf("type checking"), minimalTypeSystemSpec.phases)
-        assertEquals(listOf("TypeRef.Int64"), minimalTypeSystemSpec.types)
+        assertEquals(listOf("TypeRef.Int64", "TypeRef.String", "TypeRef.Unit"), minimalTypeSystemSpec.types)
     }
 
     /**
@@ -33,6 +33,8 @@ class TypeSystemSpecTest {
                 "TypedValDeclaration",
                 "TypedExpression",
                 "TypedInteger",
+                "TypedString",
+                "TypedPrintCall",
                 "TypedVariable",
                 "TypedGrouped",
                 "TypedPrefix",
@@ -53,6 +55,8 @@ class TypeSystemSpecTest {
                 "val declaration",
                 "identifier reference",
                 "integer literal",
+                "string literal",
+                "builtin print call",
                 "grouped expression",
                 "unary plus",
                 "unary minus",

@@ -21,6 +21,7 @@ class FrontendInfrastructureSpecTest {
             listOf(
                 "identifier",
                 "integer",
+                "string",
                 "val",
                 "left_paren",
                 "right_paren",
@@ -50,6 +51,8 @@ class FrontendInfrastructureSpecTest {
                 "val declaration",
                 "identifier expression",
                 "integer expression",
+                "string expression",
+                "builtin call expression",
                 "grouped expression",
                 "prefix plus",
                 "prefix minus",

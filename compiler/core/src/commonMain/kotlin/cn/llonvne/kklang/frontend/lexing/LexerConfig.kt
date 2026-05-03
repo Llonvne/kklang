@@ -62,6 +62,7 @@ class LexerConfig private constructor(
             rule(LexerRule.literal("val", TokenKinds.Val, "val"))
             rule(LexerRule.run("identifier", TokenKinds.Identifier, ::isIdentifierStart, ::isIdentifierContinue))
             rule(LexerRule.run("integer", TokenKinds.Integer, Char::isDigit, Char::isDigit))
+            rule(LexerRule.stringLiteral("string", TokenKinds.String))
             rule(LexerRule.literal("left paren", TokenKinds.LeftParen, "("))
             rule(LexerRule.literal("right paren", TokenKinds.RightParen, ")"))
             rule(LexerRule.literal("equals", TokenKinds.Equals, "="))

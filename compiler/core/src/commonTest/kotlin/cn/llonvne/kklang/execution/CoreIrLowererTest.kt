@@ -57,6 +57,47 @@ class CoreIrLowererTest {
     }
 
     /**
+     * 验证字符串字面量会 lowering 为 Core IR 字符串节点。
+     * Verifies that string literals lower into Core IR string nodes.
+     */
+    @Test
+    fun `lowerer lowers string literals`() {
+        val result = lowerProgram("val text = \"hello\"; text")
+
+        assertFalse(result.hasErrors)
+        val program = requireNotNull(result.program)
+        assertEquals("string(hello)", program.declarations.single().initializer.render())
+        assertEquals("var(text)", program.expression.render())
+    }
+
+    /**
+     * 验证内建 print 调用会 lowering 为 Core IR print 节点。
+     * Verifies that builtin print calls lower into Core IR print nodes.
+     */
+    @Test
+    fun `lowerer lowers builtin print calls`() {
+        val result = lowerProgram("val text = \"hello\"; print(text)")
+
+        assertFalse(result.hasErrors)
+        val program = requireNotNull(result.program)
+        assertEquals("print(var(text))", program.expression.render())
+        assertEquals(TypeRef.Unit, type("print(1)").type)
+    }
+
+    /**
+     * 验证 print argument lowering 失败会向外传播。
+     * Verifies that a print argument lowering failure propagates outward.
+     */
+    @Test
+    fun `lowerer reports print argument lowering failure`() {
+        val result = lower("print(9223372036854775808)")
+
+        assertTrue(result.hasErrors)
+        assertNull(result.ir)
+        assertEquals("EXEC003", result.diagnostics.single().code)
+    }
+
+    /**
      * 验证 val declaration initializer 的 lowering 失败会让整个 program 失败。
      * Verifies that lowering failure in a val declaration initializer fails the whole program.
      */
@@ -202,6 +243,8 @@ class CoreIrLowererTest {
 private fun IrExpression.render(): String =
     when (this) {
         is IrInt64 -> "int64($value)"
+        is IrString -> "string($value)"
+        is IrPrint -> "print(${argument.render()})"
         is IrVariable -> "var($name)"
         is IrUnary -> "(${operator.text} ${operand.render()})"
         is IrBinary -> "(${operator.text} ${left.render()} ${right.render()})"

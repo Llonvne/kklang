@@ -24,5 +24,7 @@ class KkPluginDescriptorTest {
         assertTrue(text.contains("cn.llonvne.kklang.idea.KkParserDefinition"))
         assertTrue(text.contains("cn.llonvne.kklang.idea.KkSyntaxHighlighterFactory"))
         assertTrue(text.contains("cn.llonvne.kklang.idea.KkDiagnosticExternalAnnotator"))
+        assertTrue(text.contains("cn.llonvne.kklang.idea.KkRunConfigurationType"))
+        assertTrue(text.contains("cn.llonvne.kklang.idea.KkRunConfigurationProducer"))
     }
 }

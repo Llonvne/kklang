@@ -36,6 +36,8 @@ The first bound AST nodes are:
 | `BindingScope` | ordered current-scope symbol table / 有序的当前作用域符号表 |
 | `BindingSymbol` | immutable val symbol / 不可变 val 符号 |
 | `BoundInteger` | bound integer literal / 已绑定整数字面量 |
+| `BoundString` | bound string literal / 已绑定字符串字面量 |
+| `BoundPrintCall` | bound builtin `print` call / 已绑定内建 `print` 调用 |
 | `BoundVariable` | bound variable reference carrying `BindingSymbol` / 携带 `BindingSymbol` 的已绑定变量引用 |
 | `BoundGrouped` | bound grouped expression / 已绑定分组表达式 |
 | `BoundPrefix` | bound prefix expression / 已绑定前缀表达式 |
@@ -67,6 +69,16 @@ DSL term / DSL 术语：`val declaration`。
 
 ```text
 val identifier = expression;
+```
+
+内建 `print` 调用语法如下；它不创建 `BindingSymbol`，也不会被普通 `val` 符号解析替代。
+The builtin `print` call syntax is shown below; it does not create a
+`BindingSymbol` and is not replaced by ordinary `val` symbol resolution.
+
+DSL term / DSL 术语：`builtin print call`。
+
+```text
+print(expression)
 ```
 
 program 由零个或多个 `val` declaration 加一个最终 expression 组成。
@@ -111,6 +123,10 @@ Unresolved identifiers must be rejected by the binding resolver while retaining
 the current public diagnostic code `TYPE001`.
 
 DSL term / DSL 术语：`unresolved identifiers are rejected`。
+
+未知调用名必须产生 `TYPE001`，因为当前只定义内建 `print` 调用。
+Unknown call names must produce `TYPE001` because the current language only
+defines the builtin `print` call.
 
 同一个 program scope 中重复声明同名 `val` 必须失败。
 Redeclaring the same `val` name in the same program scope must fail.

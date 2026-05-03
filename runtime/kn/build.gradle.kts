@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinNativeLink
+import org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType
 
 plugins {
     kotlin("multiplatform")
@@ -24,6 +25,7 @@ val runtimeCTestMarker = runtimeCBuildDir.map { it.file("kklang_runtime_test.ok"
 val runtimeCTestProfileRaw = runtimeCBuildDir.map { it.file("kklang_runtime_test.profraw") }
 val runtimeCTestProfileData = runtimeCBuildDir.map { it.file("kklang_runtime_test.profdata") }
 val runtimeHostDebugExecutable = layout.buildDirectory.file("bin/host/debugTest/test.kexe")
+val runtimeSingleFileDebugExecutable = layout.buildDirectory.file("bin/host/kkrunDebugExecutable/kkrun.kexe")
 
 val compileKklangRuntimeC by tasks.registering(Exec::class) {
     inputs.file(runtimeCSourceFile)
@@ -206,6 +208,11 @@ kotlin {
     }
 
     nativeTarget.apply {
+        binaries {
+            executable("kkrun", listOf(NativeBuildType.DEBUG)) {
+                entryPoint = "cn.llonvne.kklang.runtime.main"
+            }
+        }
         compilations.getByName("main") {
             cinterops {
                 val kklangRuntime by creating {
@@ -260,7 +267,35 @@ val printRuntimeHostDebugCommand by tasks.registering {
     }
 }
 
+val printRuntimeSingleFileDebugCommand by tasks.registering {
+    dependsOn("linkKkrunDebugExecutableHost")
+    dependsOn(archiveKklangRuntimeC)
+
+    doLast {
+        val executable = runtimeSingleFileDebugExecutable.get().asFile
+        if (!executable.isFile) {
+            error("Missing kkrun debug executable at ${executable.absolutePath}")
+        }
+
+        val source = rootProject.file(providers.gradleProperty("kklang.debug.source").orElse("main.kk").get())
+        println("kkrun debug executable: ${executable.absolutePath}")
+        println("Debug source path: ${source.absolutePath}")
+        println("C runtime source: ${runtimeCSourceFile.asFile.absolutePath}")
+        println("C runtime debug object: ${runtimeCObjectFile.get().asFile.absolutePath}")
+        println("LLDB:")
+        println("  lldb -- ${executable.absolutePath} ${source.absolutePath}")
+        println("  (lldb) target modules add ${runtimeCObjectFile.get().asFile.absolutePath}")
+        println("  (lldb) breakpoint set --file ${runtimeCSourceFile.asFile.name} --name kk_runtime_create")
+        println("  (lldb) breakpoint set --file ${runtimeCSourceFile.asFile.name} --name kk_string_new")
+        println("  (lldb) breakpoint set --file ${runtimeCSourceFile.asFile.name} --name kk_value_int64")
+        println("  (lldb) breakpoint set --file ${runtimeCSourceFile.asFile.name} --name kk_value_string")
+        println("  (lldb) breakpoint set --file ${runtimeCSourceFile.asFile.name} --name kk_value_unit")
+        println("  (lldb) run")
+    }
+}
+
 tasks.named("check") {
     dependsOn(runKklangRuntimeCTest)
     dependsOn(verifyKklangRuntimeCCoverage)
+    dependsOn("linkKkrunDebugExecutableHost")
 }

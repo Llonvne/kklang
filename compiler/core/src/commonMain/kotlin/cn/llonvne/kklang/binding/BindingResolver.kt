@@ -5,12 +5,14 @@ import cn.llonvne.kklang.frontend.diagnostics.Diagnostic
 import cn.llonvne.kklang.frontend.diagnostics.DiagnosticBag
 import cn.llonvne.kklang.frontend.parsing.AstProgram
 import cn.llonvne.kklang.frontend.parsing.BinaryExpression
+import cn.llonvne.kklang.frontend.parsing.CallExpression
 import cn.llonvne.kklang.frontend.parsing.Expression
 import cn.llonvne.kklang.frontend.parsing.GroupedExpression
 import cn.llonvne.kklang.frontend.parsing.IdentifierExpression
 import cn.llonvne.kklang.frontend.parsing.IntegerExpression
 import cn.llonvne.kklang.frontend.parsing.MissingExpression
 import cn.llonvne.kklang.frontend.parsing.PrefixExpression
+import cn.llonvne.kklang.frontend.parsing.StringExpression
 import cn.llonvne.kklang.frontend.parsing.ValDeclaration
 
 /**
@@ -84,6 +86,29 @@ sealed interface BoundExpression {
  */
 data class BoundInteger(
     override val syntax: IntegerExpression,
+) : BoundExpression {
+    override val span: SourceSpan
+        get() = syntax.span
+}
+
+/**
+ * binding 后的字符串字面量。
+ * Bound string literal.
+ */
+data class BoundString(
+    override val syntax: StringExpression,
+) : BoundExpression {
+    override val span: SourceSpan
+        get() = syntax.span
+}
+
+/**
+ * binding 后的内建 print 调用，携带已绑定 argument。
+ * Bound builtin print call carrying its bound argument.
+ */
+data class BoundPrintCall(
+    override val syntax: CallExpression,
+    val argument: BoundExpression,
 ) : BoundExpression {
     override val span: SourceSpan
         get() = syntax.span
@@ -255,6 +280,8 @@ class SeedBindingResolver : BindingResolver {
     ): BoundExpression? =
         when (expression) {
             is IntegerExpression -> BoundInteger(expression)
+            is StringExpression -> BoundString(expression)
+            is CallExpression -> bindCall(expression, scope, diagnostics)
             is IdentifierExpression -> bindIdentifier(expression, scope, diagnostics)
             is GroupedExpression -> bindGrouped(expression, scope, diagnostics)
             is PrefixExpression -> bindPrefix(expression, scope, diagnostics)
@@ -265,6 +292,23 @@ class SeedBindingResolver : BindingResolver {
             }
             is MissingExpression -> BoundMissing(expression)
         }
+
+    /**
+     * binding 当前唯一的内建调用 `print(argument)`，未知调用名仍报告 TYPE001。
+     * Binds the current only builtin call `print(argument)` and reports TYPE001 for unknown call names.
+     */
+    private fun bindCall(
+        expression: CallExpression,
+        scope: BindingScope,
+        diagnostics: DiagnosticBag,
+    ): BoundExpression? {
+        val argument = bindExpression(expression.argument, scope, diagnostics)
+        if (expression.callee.name != "print") {
+            diagnostics.report("TYPE001", "unresolved identifier", expression.callee.span)
+            return null
+        }
+        return if (argument == null) null else BoundPrintCall(expression, argument)
+    }
 
     /**
      * binding 分组 expression，并传播内部失败。

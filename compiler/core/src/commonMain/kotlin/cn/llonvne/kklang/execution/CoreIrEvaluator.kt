@@ -4,12 +4,13 @@ import cn.llonvne.kklang.frontend.diagnostics.Diagnostic
 import cn.llonvne.kklang.frontend.diagnostics.DiagnosticBag
 
 /**
- * Core IR 求值的结果，成功时 value 非空，失败时 diagnostics 非空。
- * Result of Core IR evaluation; value is present on success and diagnostics are present on failure.
+ * Core IR 求值的结果，成功时 value 非空，失败时 diagnostics 非空，并始终保留已产生输出。
+ * Result of Core IR evaluation; value is present on success, diagnostics are present on failure, and produced output is always preserved.
  */
 data class EvaluationResult(
     val value: ExecutionValue?,
     val diagnostics: List<Diagnostic>,
+    val output: String = "",
 ) {
     val hasErrors: Boolean
         get() = diagnostics.isNotEmpty()
@@ -28,8 +29,8 @@ fun interface IrEvaluator {
 }
 
 /**
- * 当前最小 Core IR evaluator，支持 Int64、不可变 val 和受检整数运算。
- * Current minimal Core IR evaluator supporting Int64, immutable vals, and checked integer operations.
+ * 当前最小 Core IR evaluator，支持 Int64、String、Unit、不可变 val、print 和受检整数运算。
+ * Current minimal Core IR evaluator supporting Int64, String, Unit, immutable vals, print, and checked integer operations.
  */
 class CoreIrEvaluator : IrEvaluator {
     /**
@@ -39,13 +40,14 @@ class CoreIrEvaluator : IrEvaluator {
     override fun evaluate(program: IrProgram): EvaluationResult {
         val diagnostics = DiagnosticBag()
         val environment = mutableMapOf<String, ExecutionValue>()
+        val output = StringBuilder()
         for (declaration in program.declarations) {
-            val value = evaluateExpression(declaration.initializer, environment, diagnostics)
-                ?: return EvaluationResult(null, diagnostics.toList())
+            val value = evaluateExpression(declaration.initializer, environment, diagnostics, output)
+                ?: return EvaluationResult(null, diagnostics.toList(), output.toString())
             environment[declaration.name] = value
         }
-        val value = evaluateExpression(program.expression, environment, diagnostics)
-        return EvaluationResult(value = value, diagnostics = diagnostics.toList())
+        val value = evaluateExpression(program.expression, environment, diagnostics, output)
+        return EvaluationResult(value = value, diagnostics = diagnostics.toList(), output = output.toString())
     }
 
     /**
@@ -63,13 +65,31 @@ class CoreIrEvaluator : IrEvaluator {
         expression: IrExpression,
         environment: Map<String, ExecutionValue>,
         diagnostics: DiagnosticBag,
+        output: StringBuilder,
     ): ExecutionValue? =
         when (expression) {
             is IrInt64 -> ExecutionValue.Int64(expression.value)
+            is IrString -> ExecutionValue.String(expression.value)
+            is IrPrint -> evaluatePrint(expression, environment, diagnostics, output)
             is IrVariable -> evaluateVariable(expression, environment, diagnostics)
-            is IrUnary -> evaluateUnary(expression, environment, diagnostics)
-            is IrBinary -> evaluateBinary(expression, environment, diagnostics)
+            is IrUnary -> evaluateUnary(expression, environment, diagnostics, output)
+            is IrBinary -> evaluateBinary(expression, environment, diagnostics, output)
         }
+
+    /**
+     * 求值内建 print 调用，写出 argument 的文本形式并返回 Unit。
+     * Evaluates a builtin print call, writes the argument text form, and returns Unit.
+     */
+    private fun evaluatePrint(
+        expression: IrPrint,
+        environment: Map<String, ExecutionValue>,
+        diagnostics: DiagnosticBag,
+        output: StringBuilder,
+    ): ExecutionValue? {
+        val argument = evaluateExpression(expression.argument, environment, diagnostics, output) ?: return null
+        output.append(argument.printText())
+        return ExecutionValue.Unit
+    }
 
     /**
      * 求值变量引用，未绑定时报告防御性 EXEC001。
@@ -96,8 +116,9 @@ class CoreIrEvaluator : IrEvaluator {
         expression: IrUnary,
         environment: Map<String, ExecutionValue>,
         diagnostics: DiagnosticBag,
+        output: StringBuilder,
     ): ExecutionValue? {
-        val operand = evaluateExpression(expression.operand, environment, diagnostics)?.asInt64() ?: return null
+        val operand = evaluateExpression(expression.operand, environment, diagnostics, output)?.asInt64(expression, diagnostics) ?: return null
         return when (expression.operator) {
             IrUnaryOperator.Plus -> ExecutionValue.Int64(operand)
             IrUnaryOperator.Minus -> negate(expression, operand, diagnostics)
@@ -112,9 +133,10 @@ class CoreIrEvaluator : IrEvaluator {
         expression: IrBinary,
         environment: Map<String, ExecutionValue>,
         diagnostics: DiagnosticBag,
+        output: StringBuilder,
     ): ExecutionValue? {
-        val left = evaluateExpression(expression.left, environment, diagnostics)?.asInt64()
-        val right = evaluateExpression(expression.right, environment, diagnostics)?.asInt64()
+        val left = evaluateExpression(expression.left, environment, diagnostics, output)?.asInt64(expression, diagnostics)
+        val right = evaluateExpression(expression.right, environment, diagnostics, output)?.asInt64(expression, diagnostics)
         if (left == null || right == null) {
             return null
         }
@@ -226,11 +248,30 @@ class CoreIrEvaluator : IrEvaluator {
     }
 
     /**
-     * 将当前执行值拆成 Int64；当前值模型只包含 Int64。
-     * Extracts the current execution value as Int64; the current value model only contains Int64.
+     * 将当前执行值拆成 Int64；非 Int64 值在 malformed IR 中产生 EXEC001。
+     * Extracts the current execution value as Int64; non-Int64 values in malformed IR produce EXEC001.
      */
-    private fun ExecutionValue.asInt64(): Long =
+    private fun ExecutionValue.asInt64(expression: IrExpression, diagnostics: DiagnosticBag): Long? =
         when (this) {
             is ExecutionValue.Int64 -> value
+            is ExecutionValue.String -> {
+                diagnostics.report("EXEC001", "expected Int64 value", expression.span)
+                null
+            }
+            ExecutionValue.Unit -> {
+                diagnostics.report("EXEC001", "expected Int64 value", expression.span)
+                null
+            }
+        }
+
+    /**
+     * 返回 print 使用的稳定文本形式。
+     * Returns the stable text form used by print.
+     */
+    private fun ExecutionValue.printText(): String =
+        when (this) {
+            is ExecutionValue.Int64 -> value.toString()
+            is ExecutionValue.String -> value
+            ExecutionValue.Unit -> "Unit"
         }
 }

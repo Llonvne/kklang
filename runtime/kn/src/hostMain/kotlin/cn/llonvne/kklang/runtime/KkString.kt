@@ -85,6 +85,6 @@ class KkString internal constructor(
      * 返回当前 C string handle；字符串已关闭时抛出异常。
      * Returns the current C string handle and throws when the string is closed.
      */
-    private fun currentHandle(): CPointer<kk_string> =
+    internal fun currentHandle(): CPointer<kk_string> =
         handle ?: throw IllegalStateException("string is closed")
 }

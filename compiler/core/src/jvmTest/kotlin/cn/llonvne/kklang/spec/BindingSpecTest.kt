@@ -18,7 +18,7 @@ class BindingSpecTest {
     @Test
     fun `binding dsl spec records val syntax`() {
         assertEquals(
-            listOf("val declaration", "val identifier = expression;"),
+            listOf("val declaration", "val identifier = expression;", "builtin print call"),
             minimalBindingSpec.syntaxes,
         )
     }
@@ -36,6 +36,8 @@ class BindingSpecTest {
                 "BindingScope",
                 "BindingSymbol",
                 "BoundInteger",
+                "BoundString",
+                "BoundPrintCall",
                 "BoundVariable",
                 "BoundGrouped",
                 "BoundPrefix",
@@ -64,6 +66,7 @@ class BindingSpecTest {
                 "initializer can reference earlier vals",
                 "initializer cannot reference itself or later vals",
                 "unresolved identifiers are rejected",
+                "builtin print call",
                 "same-scope duplicate val is rejected",
                 "assignment expression is not part of the grammar",
             ),

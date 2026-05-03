@@ -26,12 +26,20 @@ source expression is semantically valid.
 
 ## Type Model / 类型模型
 
-第一版只定义 `TypeRef.Int64`。
-The first version defines only `TypeRef.Int64`.
+第一版定义 `TypeRef.Int64`、`TypeRef.String` 和 `TypeRef.Unit`。
+The first version defines `TypeRef.Int64`, `TypeRef.String`, and
+`TypeRef.Unit`.
 
 整数 literal、分组表达式、一元整数运算和二元整数运算的类型都是 `TypeRef.Int64`。
 Integer literals, grouped expressions, unary integer operations, and binary
 integer operations all have type `TypeRef.Int64`.
+
+字符串 literal 的类型是 `TypeRef.String`。
+String literals have type `TypeRef.String`.
+
+内建 `print(value)` 表达式接受当前所有已定义值类型，并返回 `TypeRef.Unit`。
+The builtin `print(value)` expression accepts every currently defined value
+type and returns `TypeRef.Unit`.
 
 binding 成功的 `val` declaration 会把名字绑定到 initializer 的类型。
 A successfully bound `val` declaration binds its name to the initializer type.
@@ -73,6 +81,8 @@ The first typed AST nodes are:
 | `TypedProgram` | typed program / 已类型检查的程序 |
 | `TypedValDeclaration` | typed immutable val declaration / 已类型检查的不可变 val 声明 |
 | `TypedInteger` | typed integer literal / 已类型检查的整数字面量 |
+| `TypedString` | typed string literal / 已类型检查的字符串字面量 |
+| `TypedPrintCall` | typed builtin `print` call / 已类型检查的内建 `print` 调用 |
 | `TypedVariable` | typed variable reference / 已类型检查的变量引用 |
 | `TypedGrouped` | typed grouped expression / 已类型检查的分组表达式 |
 | `TypedPrefix` | typed prefix expression / 已类型检查的前缀表达式 |
@@ -88,6 +98,8 @@ Currently supported typed source forms:
 | `val` declaration / `val` 声明 | initializer type / initializer 类型 |
 | identifier reference / 标识符引用 | referenced `val` type / 被引用 `val` 的类型 |
 | integer literal / 整数字面量 | `TypeRef.Int64` |
+| string literal / 字符串字面量 | `TypeRef.String` |
+| builtin `print(value)` / 内建 `print(value)` | `TypeRef.Unit` |
 | grouped expression / 分组表达式 | inner expression type / 内部表达式类型 |
 | unary `+` / 一元 `+` | `TypeRef.Int64` |
 | unary `-` / 一元 `-` | `TypeRef.Int64` |
@@ -108,6 +120,10 @@ produce `TYPE002`.
 
 不属于当前 seed expression grammar 的 operator 必须产生 `TYPE002`。
 Operators outside the current seed expression grammar must produce `TYPE002`.
+
+未知调用名必须在 binding 阶段产生 `TYPE001`；当前类型系统只接受已经绑定的内建 `print` 调用。
+Unknown call names must produce `TYPE001` during binding; the current type
+system accepts only already-bound builtin `print` calls.
 
 ## Diagnostics / 诊断
 

@@ -82,7 +82,7 @@ class KkLspServerTest {
     @Test
     fun `semantic tokens use shared highlighting categories`() {
         val server = KkLspServer()
-        server.handle(didOpen("file:///sample.kk", "val x = (1 + 2);\n@"))
+        server.handle(didOpen("file:///sample.kk", "val x = (1 + 2); \\\"s\\\"\n@"))
 
         val response = server.handle(
             KkLspJson.parseObject(
@@ -92,7 +92,7 @@ class KkLspServerTest {
         val data = response["result"]!!.jsonObject["data"]!!.jsonArray.map { it.jsonPrimitive.int }
         val tokenTypes = data.chunked(5).map { it[3] }
 
-        assertEquals(listOf(0, 1, 3, 4, 2, 3, 2, 4, 4, 5), tokenTypes)
+        assertEquals(listOf(0, 1, 4, 5, 2, 4, 2, 5, 5, 3, 6), tokenTypes)
         assertTrue(data.chunked(5).any { it[0] == 1 })
     }
 
@@ -145,15 +145,16 @@ class KkLspServerTest {
     @Test
     fun `semantic token utility covers categories and skipped trivia`() {
         assertEquals(
-            listOf("keyword", "variable", "number", "operator", "delimiter", "unknown"),
+            listOf("keyword", "variable", "number", "string", "operator", "delimiter", "unknown"),
             KkLspSemanticTokens.tokenTypes,
         )
         assertEquals(0, KkLspSemanticTokens.typeIndex(KkHighlightTokenCategory.Keyword))
         assertEquals(1, KkLspSemanticTokens.typeIndex(KkHighlightTokenCategory.Identifier))
         assertEquals(2, KkLspSemanticTokens.typeIndex(KkHighlightTokenCategory.Integer))
-        assertEquals(3, KkLspSemanticTokens.typeIndex(KkHighlightTokenCategory.Operator))
-        assertEquals(4, KkLspSemanticTokens.typeIndex(KkHighlightTokenCategory.Delimiter))
-        assertEquals(5, KkLspSemanticTokens.typeIndex(KkHighlightTokenCategory.Unknown))
+        assertEquals(3, KkLspSemanticTokens.typeIndex(KkHighlightTokenCategory.String))
+        assertEquals(4, KkLspSemanticTokens.typeIndex(KkHighlightTokenCategory.Operator))
+        assertEquals(5, KkLspSemanticTokens.typeIndex(KkHighlightTokenCategory.Delimiter))
+        assertEquals(6, KkLspSemanticTokens.typeIndex(KkHighlightTokenCategory.Unknown))
         assertEquals(null, KkLspSemanticTokens.typeIndex(KkHighlightTokenCategory.Whitespace))
         assertEquals(null, KkLspSemanticTokens.typeIndex(KkHighlightTokenCategory.EndOfFile))
 

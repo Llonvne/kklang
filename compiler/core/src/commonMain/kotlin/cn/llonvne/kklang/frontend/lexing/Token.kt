@@ -25,6 +25,7 @@ data class TokenKind(val id: String) {
 object TokenKinds {
     val Identifier: TokenKind = TokenKind("identifier")
     val Integer: TokenKind = TokenKind("integer")
+    val String: TokenKind = TokenKind("string")
     val Val: TokenKind = TokenKind("val")
     val LeftParen: TokenKind = TokenKind("left_paren")
     val RightParen: TokenKind = TokenKind("right_paren")

@@ -76,10 +76,10 @@ class KkParserDefinition : ParserDefinition {
     override fun getCommentTokens(): TokenSet = TokenSet.EMPTY
 
     /**
-     * 当前语言还没有 string literal token。
-     * The current language has no string-literal tokens yet.
+     * 返回 string literal token 集合。
+     * Returns the string-literal token set.
      */
-    override fun getStringLiteralElements(): TokenSet = TokenSet.EMPTY
+    override fun getStringLiteralElements(): TokenSet = TokenSet.create(KkTokenTypes.STRING)
 
     /**
      * 为普通 AST node 创建 wrapper PSI element。

@@ -6,21 +6,25 @@ import cn.llonvne.kklang.binding.BoundExpression
 import cn.llonvne.kklang.binding.BoundGrouped
 import cn.llonvne.kklang.binding.BoundInteger
 import cn.llonvne.kklang.binding.BoundMissing
+import cn.llonvne.kklang.binding.BoundPrintCall
 import cn.llonvne.kklang.binding.BoundPrefix
 import cn.llonvne.kklang.binding.BoundVariable
 import cn.llonvne.kklang.binding.BindingSymbol
+import cn.llonvne.kklang.binding.BoundString
 import cn.llonvne.kklang.binding.SeedBindingResolver
 import cn.llonvne.kklang.frontend.diagnostics.Diagnostic
 import cn.llonvne.kklang.frontend.diagnostics.DiagnosticBag
 import cn.llonvne.kklang.frontend.lexing.TokenKinds
 import cn.llonvne.kklang.frontend.parsing.AstProgram
 import cn.llonvne.kklang.frontend.parsing.BinaryExpression
+import cn.llonvne.kklang.frontend.parsing.CallExpression
 import cn.llonvne.kklang.frontend.parsing.Expression
 import cn.llonvne.kklang.frontend.parsing.GroupedExpression
 import cn.llonvne.kklang.frontend.parsing.IdentifierExpression
 import cn.llonvne.kklang.frontend.parsing.IntegerExpression
 import cn.llonvne.kklang.frontend.parsing.MissingExpression
 import cn.llonvne.kklang.frontend.parsing.PrefixExpression
+import cn.llonvne.kklang.frontend.parsing.StringExpression
 import cn.llonvne.kklang.frontend.parsing.ValDeclaration
 
 /**
@@ -33,6 +37,18 @@ sealed interface TypeRef {
      * Signed 64-bit integer type.
      */
     data object Int64 : TypeRef
+
+    /**
+     * 字符串类型。
+     * String type.
+     */
+    data object String : TypeRef
+
+    /**
+     * Unit 类型，只表示副作用完成。
+     * Unit type that only represents completion of a side effect.
+     */
+    data object Unit : TypeRef
 }
 
 /**
@@ -75,6 +91,25 @@ data class TypedValDeclaration(
 data class TypedInteger(
     override val syntax: IntegerExpression,
     override val type: TypeRef = TypeRef.Int64,
+) : TypedExpression
+
+/**
+ * 类型检查后的字符串字面量 expression。
+ * Type-checked string-literal expression.
+ */
+data class TypedString(
+    override val syntax: StringExpression,
+    override val type: TypeRef = TypeRef.String,
+) : TypedExpression
+
+/**
+ * 类型检查后的内建 print 调用 expression。
+ * Type-checked builtin print-call expression.
+ */
+data class TypedPrintCall(
+    override val syntax: CallExpression,
+    val argument: TypedExpression,
+    override val type: TypeRef = TypeRef.Unit,
 ) : TypedExpression
 
 /**
@@ -231,12 +266,27 @@ class SeedTypeChecker : TypeChecker {
     ): TypedExpression? =
         when (expression) {
             is BoundInteger -> TypedInteger(expression.syntax)
+            is BoundString -> TypedString(expression.syntax)
+            is BoundPrintCall -> checkPrintCall(expression, scope, diagnostics)
             is BoundGrouped -> checkGrouped(expression, scope, diagnostics)
             is BoundPrefix -> checkPrefix(expression, scope, diagnostics)
             is BoundBinary -> checkBinary(expression, scope, diagnostics)
             is BoundVariable -> checkIdentifier(expression, scope, diagnostics)
             is BoundMissing -> unsupported(expression.syntax, diagnostics)
         }
+
+    /**
+     * 类型检查内建 print 调用，argument 可为当前已定义的任何值类型。
+     * Type-checks a builtin print call whose argument may be any currently defined value type.
+     */
+    private fun checkPrintCall(
+        expression: BoundPrintCall,
+        scope: Map<BindingSymbol, TypeRef>,
+        diagnostics: DiagnosticBag,
+    ): TypedExpression? {
+        val argument = checkExpression(expression.argument, scope, diagnostics) ?: return null
+        return TypedPrintCall(syntax = expression.syntax, argument = argument)
+    }
 
     /**
      * 类型检查分组表达式并保留内部表达式类型。
@@ -261,6 +311,9 @@ class SeedTypeChecker : TypeChecker {
         diagnostics: DiagnosticBag,
     ): TypedExpression? {
         val operand = checkExpression(expression.operand, scope, diagnostics) ?: return null
+        if (operand.type != TypeRef.Int64) {
+            return unsupported(expression.syntax, diagnostics)
+        }
         if (expression.syntax.operator.kind != TokenKinds.Plus && expression.syntax.operator.kind != TokenKinds.Minus) {
             return unsupported(expression.syntax, diagnostics)
         }
@@ -280,6 +333,9 @@ class SeedTypeChecker : TypeChecker {
         val right = checkExpression(expression.right, scope, diagnostics)
         if (left == null || right == null) {
             return null
+        }
+        if (left.type != TypeRef.Int64 || right.type != TypeRef.Int64) {
+            return unsupported(expression.syntax, diagnostics)
         }
         val isSupportedOperator = expression.syntax.operator.kind == TokenKinds.Plus ||
             expression.syntax.operator.kind == TokenKinds.Minus ||

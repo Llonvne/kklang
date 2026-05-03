@@ -12,7 +12,7 @@ import kotlinx.serialization.json.JsonPrimitive
  * LSP semantic-token legend and relative encoding utilities.
  */
 internal object KkLspSemanticTokens {
-    val tokenTypes: List<String> = listOf("keyword", "variable", "number", "operator", "delimiter", "unknown")
+    val tokenTypes: List<String> = listOf("keyword", "variable", "number", "string", "operator", "delimiter", "unknown")
 
     /**
      * 将共享高亮 token 编码为 LSP semantic token data。
@@ -44,9 +44,10 @@ internal object KkLspSemanticTokens {
             KkHighlightTokenCategory.Keyword -> 0
             KkHighlightTokenCategory.Identifier -> 1
             KkHighlightTokenCategory.Integer -> 2
-            KkHighlightTokenCategory.Operator -> 3
-            KkHighlightTokenCategory.Delimiter -> 4
-            KkHighlightTokenCategory.Unknown -> 5
+            KkHighlightTokenCategory.String -> 3
+            KkHighlightTokenCategory.Operator -> 4
+            KkHighlightTokenCategory.Delimiter -> 5
+            KkHighlightTokenCategory.Unknown -> 6
             KkHighlightTokenCategory.Whitespace,
             KkHighlightTokenCategory.EndOfFile,
             -> null

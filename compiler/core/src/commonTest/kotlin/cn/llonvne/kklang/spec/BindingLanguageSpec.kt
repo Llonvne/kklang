@@ -79,12 +79,15 @@ class BindingSpecBuilder(private val name: String) {
 val minimalBindingSpec = bindingSpec("minimal-binding") {
     syntax("val declaration")
     syntax("val identifier = expression;")
+    syntax("builtin print call")
 
     boundNode("BoundProgram")
     boundNode("BoundValDeclaration")
     boundNode("BindingScope")
     boundNode("BindingSymbol")
     boundNode("BoundInteger")
+    boundNode("BoundString")
+    boundNode("BoundPrintCall")
     boundNode("BoundVariable")
     boundNode("BoundGrouped")
     boundNode("BoundPrefix")
@@ -101,6 +104,7 @@ val minimalBindingSpec = bindingSpec("minimal-binding") {
     scopeRule("initializer can reference earlier vals")
     scopeRule("initializer cannot reference itself or later vals")
     scopeRule("unresolved identifiers are rejected")
+    scopeRule("builtin print call")
     scopeRule("same-scope duplicate val is rejected")
     scopeRule("assignment expression is not part of the grammar")
 

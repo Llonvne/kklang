@@ -115,6 +115,11 @@ class Parser(
         }
 
         while (true) {
+            if (left is IdentifierExpression && current.kind == TokenKinds.LeftParen && ParserConfig.CALL_PRECEDENCE > minBindingPower) {
+                left = parseBuiltinCall(left)
+                continue
+            }
+
             val infix = config.infix(current.kind)
             if (infix == null || infix.precedence <= minBindingPower) {
                 break
@@ -125,6 +130,17 @@ class Parser(
         }
 
         return left
+    }
+
+    /**
+     * 解析当前最小内建调用语法：identifier 后跟一个括号包裹的 argument。
+     * Parses the current minimal builtin call syntax: an identifier followed by one parenthesized argument.
+     */
+    private fun parseBuiltinCall(callee: IdentifierExpression): CallExpression {
+        val leftParen = expect(TokenKinds.LeftParen, "PARSE003", "expected left_paren")
+        val argument = parseExpression()
+        val rightParen = expect(TokenKinds.RightParen, "PARSE003", "expected right_paren")
+        return CallExpression(callee = callee, leftParen = leftParen, argument = argument, rightParen = rightParen)
     }
 
     /**

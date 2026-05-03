@@ -5,6 +5,7 @@ import cn.llonvne.kklang.binding.BoundExpression
 import cn.llonvne.kklang.binding.BoundGrouped
 import cn.llonvne.kklang.binding.BoundInteger
 import cn.llonvne.kklang.binding.BoundMissing
+import cn.llonvne.kklang.binding.BoundPrintCall
 import cn.llonvne.kklang.binding.BoundPrefix
 import cn.llonvne.kklang.binding.BoundProgram
 import cn.llonvne.kklang.binding.BoundVariable
@@ -16,6 +17,7 @@ import cn.llonvne.kklang.frontend.lexing.Token
 import cn.llonvne.kklang.frontend.lexing.TokenKind
 import cn.llonvne.kklang.frontend.parsing.AstProgram
 import cn.llonvne.kklang.frontend.parsing.BinaryExpression
+import cn.llonvne.kklang.frontend.parsing.CallExpression
 import cn.llonvne.kklang.frontend.parsing.Expression
 import cn.llonvne.kklang.frontend.parsing.GroupedExpression
 import cn.llonvne.kklang.frontend.parsing.IdentifierExpression
@@ -60,6 +62,38 @@ class TypeCheckerTest {
         assertIs<TypedGrouped>(expression)
         assertEquals(expression.inner.type, expression.type)
         assertEquals(TypeRef.Int64, expression.type)
+    }
+
+    /**
+     * 验证字符串字面量会推导为 String 类型。
+     * Verifies that string literals are inferred as the String type.
+     */
+    @Test
+    fun `type checker infers string literals`() {
+        val result = check("\"hello\"")
+
+        assertFalse(result.hasErrors)
+        val expression = assertIs<TypedString>(requireNotNull(result.expression))
+        assertEquals(TypeRef.String, expression.type)
+        assertEquals("hello", expression.syntax.text)
+    }
+
+    /**
+     * 验证内建 print 调用接受当前值类型并返回 Unit。
+     * Verifies that builtin print calls accept current value types and return Unit.
+     */
+    @Test
+    fun `type checker infers builtin print calls as unit`() {
+        val intPrint = check("print(1)")
+        val stringPrint = check("print(\"hello\")")
+        val unitPrint = check("print(print(\"hello\"))")
+
+        assertFalse(intPrint.hasErrors)
+        assertFalse(stringPrint.hasErrors)
+        assertFalse(unitPrint.hasErrors)
+        assertEquals(TypeRef.Unit, requireNotNull(intPrint.expression).type)
+        assertEquals(TypeRef.Unit, requireNotNull(stringPrint.expression).type)
+        assertEquals("print(print(string(hello)))", requireNotNull(unitPrint.expression).render())
     }
 
     /**
@@ -163,11 +197,13 @@ class TypeCheckerTest {
         val rightParen = Lexer().tokenize(SourceText.of("sample.kk", ")")).tokens.first()
         val grouped = BoundGrouped(GroupedExpression(leftParen, missing.syntax, rightParen), missing)
         val prefix = BoundPrefix(PrefixExpression(minus, missing.syntax), missing)
+        val print = BoundPrintCall(assertIs<CallExpression>(parse("print(1)")), missing)
         val leftFailure = BoundBinary(BinaryExpression(missing.syntax, plus, one.syntax), missing, one)
         val rightFailure = BoundBinary(BinaryExpression(one.syntax, plus, missing.syntax), one, missing)
 
         assertEquals(listOf("TYPE002"), checkBoundExpression(grouped).diagnostics.map { it.code })
         assertEquals(listOf("TYPE002"), checkBoundExpression(prefix).diagnostics.map { it.code })
+        assertEquals(listOf("TYPE002"), checkBoundExpression(print).diagnostics.map { it.code })
         assertEquals(listOf("TYPE002"), checkBoundExpression(leftFailure).diagnostics.map { it.code })
         assertEquals(listOf("TYPE002"), checkBoundExpression(rightFailure).diagnostics.map { it.code })
     }
@@ -208,6 +244,18 @@ class TypeCheckerTest {
 
         assertEquals("TYPE002", SeedTypeChecker().check(prefix).diagnostics.single().code)
         assertEquals("TYPE002", SeedTypeChecker().check(binary).diagnostics.single().code)
+    }
+
+    /**
+     * 验证整数运算不接受字符串 operand。
+     * Verifies that integer operations do not accept string operands.
+     */
+    @Test
+    fun `type checker rejects string operands for integer operators`() {
+        assertEquals(listOf("TYPE002"), check("-\"x\"").diagnostics.map { it.code })
+        assertEquals(listOf("TYPE002"), check("1 + \"x\"").diagnostics.map { it.code })
+        assertEquals(listOf("TYPE002"), check("\"x\" + 1").diagnostics.map { it.code })
+        assertEquals(listOf("TYPE002"), check("print(1) + 1").diagnostics.map { it.code })
     }
 
     /**
@@ -312,6 +360,8 @@ class TypeCheckerTest {
 private fun TypedExpression.render(): String =
     when (this) {
         is TypedInteger -> "int64"
+        is TypedString -> "string(${syntax.text})"
+        is TypedPrintCall -> "print(${argument.render()})"
         is TypedVariable -> "variable(${syntax.name})"
         is TypedGrouped -> "grouped(${inner.render()})"
         is TypedPrefix -> "prefix(${syntax.operator.lexeme}, ${operand.render()})"

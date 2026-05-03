@@ -62,5 +62,26 @@ class LexerRule private constructor(
                     endOffset - offset
                 }
             }
+
+        /**
+         * 创建第一版字符串字面量规则：只接受同一行内闭合的双引号文本。
+         * Creates the first string-literal rule: only closed double-quoted text on one line is accepted.
+         */
+        fun stringLiteral(name: String, kind: TokenKind): LexerRule =
+            LexerRule(name = name, kind = kind) { source, offset ->
+                if (source.content[offset] != '"') {
+                    0
+                } else {
+                    var endOffset = offset + 1
+                    while (endOffset < source.length && source.content[endOffset] != '"' && source.content[endOffset] != '\n') {
+                        endOffset += 1
+                    }
+                    if (endOffset < source.length && source.content[endOffset] == '"') {
+                        endOffset + 1 - offset
+                    } else {
+                        0
+                    }
+                }
+            }
     }
 }

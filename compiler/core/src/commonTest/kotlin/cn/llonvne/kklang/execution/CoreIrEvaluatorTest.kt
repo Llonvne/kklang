@@ -42,6 +42,54 @@ class CoreIrEvaluatorTest {
     }
 
     /**
+     * 验证 evaluator 可以返回字符串值并通过 val 引用传播。
+     * Verifies that the evaluator can return string values and propagate them through val references.
+     */
+    @Test
+    fun `evaluator evaluates string literals and variables`() {
+        val program = IrProgram(
+            declarations = listOf(IrValDeclaration(name = "text", initializer = IrString("hello", span), span = span)),
+            expression = IrVariable("text", span),
+        )
+
+        val result = CoreIrEvaluator().evaluate(program)
+
+        assertEquals(ExecutionValue.String("hello"), result.value)
+    }
+
+    /**
+     * 验证 evaluator 执行 print 副作用并返回 Unit。
+     * Verifies that the evaluator executes print side effects and returns Unit.
+     */
+    @Test
+    fun `evaluator evaluates print output and returns unit`() {
+        val program = IrProgram(
+            declarations = listOf(IrValDeclaration(name = "text", initializer = IrString("hello", span), span = span)),
+            expression = IrPrint(
+                IrPrint(IrVariable("text", span), span),
+                span,
+            ),
+        )
+
+        val result = CoreIrEvaluator().evaluate(program)
+
+        assertEquals(ExecutionValue.Unit, result.value)
+        assertEquals("helloUnit", result.output)
+    }
+
+    /**
+     * 验证 print 使用 Int64 的十进制文本形式。
+     * Verifies that print uses the decimal text form for Int64.
+     */
+    @Test
+    fun `evaluator prints integer text`() {
+        val result = CoreIrEvaluator().evaluate(IrPrint(IrInt64(42, span), span))
+
+        assertEquals(ExecutionValue.Unit, result.value)
+        assertEquals("42", result.output)
+    }
+
+    /**
      * 验证未绑定变量和 declaration initializer 失败都会让 program 求值失败。
      * Verifies that unbound variables and declaration-initializer failures make program evaluation fail.
      */
@@ -61,6 +109,25 @@ class CoreIrEvaluatorTest {
         assertTrue(declarationFailure.hasErrors)
         assertNull(declarationFailure.value)
         assertEquals("EXEC001", declarationFailure.diagnostics.single().code)
+    }
+
+    /**
+     * 验证 print operand 求值失败时外层表达式失败并保留已经产生的输出。
+     * Verifies that print fails when its operand fails and preserves output already produced.
+     */
+    @Test
+    fun `evaluator reports print operand failure`() {
+        val result = CoreIrEvaluator().evaluate(
+            IrProgram(
+                declarations = listOf(IrValDeclaration("printed", IrPrint(IrString("before", span), span), span)),
+                expression = IrPrint(IrVariable("missing", span), span),
+            ),
+        )
+
+        assertTrue(result.hasErrors)
+        assertNull(result.value)
+        assertEquals("before", result.output)
+        assertEquals("EXEC001", result.diagnostics.single().code)
     }
 
     /**
@@ -232,5 +299,32 @@ class CoreIrEvaluatorTest {
         assertTrue(rightFailure.hasErrors)
         assertNull(rightFailure.value)
         assertEquals("EXEC002", rightFailure.diagnostics.single().code)
+    }
+
+    /**
+     * 验证 malformed IR 中字符串参与整数运算会产生 EXEC001。
+     * Verifies that strings in integer operations inside malformed IR produce EXEC001.
+     */
+    @Test
+    fun `evaluator reports string operands in malformed integer operations`() {
+        val result = CoreIrEvaluator().evaluate(
+            IrBinary(left = IrString("x", span), operator = IrBinaryOperator.Plus, right = IrInt64(1, span), span = span),
+        )
+        val unit = CoreIrEvaluator().evaluate(
+            IrBinary(
+                left = IrPrint(IrString("x", span), span),
+                operator = IrBinaryOperator.Plus,
+                right = IrInt64(1, span),
+                span = span,
+            ),
+        )
+
+        assertTrue(result.hasErrors)
+        assertNull(result.value)
+        assertEquals("EXEC001", result.diagnostics.single().code)
+        assertTrue(unit.hasErrors)
+        assertNull(unit.value)
+        assertEquals("x", unit.output)
+        assertEquals("EXEC001", unit.diagnostics.single().code)
     }
 }

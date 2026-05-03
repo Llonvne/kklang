@@ -27,6 +27,7 @@ class KkSyntaxHighlighter : SyntaxHighlighterBase() {
             KkTokenTypes.KEYWORD -> pack(KEYWORD)
             KkTokenTypes.IDENTIFIER -> pack(IDENTIFIER)
             KkTokenTypes.INTEGER -> pack(INTEGER)
+            KkTokenTypes.STRING -> pack(STRING)
             KkTokenTypes.OPERATOR -> pack(OPERATOR)
             KkTokenTypes.DELIMITER -> pack(DELIMITER)
             KkTokenTypes.UNKNOWN -> pack(UNKNOWN)
@@ -44,6 +45,8 @@ class KkSyntaxHighlighter : SyntaxHighlighterBase() {
             TextAttributesKey.createTextAttributesKey("KK_IDENTIFIER", DefaultLanguageHighlighterColors.IDENTIFIER)
         val INTEGER: TextAttributesKey =
             TextAttributesKey.createTextAttributesKey("KK_INTEGER", DefaultLanguageHighlighterColors.NUMBER)
+        val STRING: TextAttributesKey =
+            TextAttributesKey.createTextAttributesKey("KK_STRING", DefaultLanguageHighlighterColors.STRING)
         val OPERATOR: TextAttributesKey =
             TextAttributesKey.createTextAttributesKey("KK_OPERATOR", DefaultLanguageHighlighterColors.OPERATION_SIGN)
         val DELIMITER: TextAttributesKey =

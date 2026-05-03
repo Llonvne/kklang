@@ -19,10 +19,10 @@ tooling spec, tests, and implementation in the same change.
 
 ## Current Scope / 当前范围
 
-第一版工具链只要求 `.kk` 文件识别、语法高亮、LSP 诊断、LSP semantic tokens、IDEA 最小 PSI 和 IDEA 诊断标注。
-The first tooling version requires only `.kk` file recognition, syntax
-highlighting, LSP diagnostics, LSP semantic tokens, IDEA minimal PSI, and IDEA
-diagnostic annotations.
+第一版工具链要求 `.kk` 文件识别、语法高亮、LSP 诊断、LSP semantic tokens、IDEA 最小 PSI、IDEA 诊断标注和 IDEA 单文件运行配置。
+The first tooling version requires `.kk` file recognition, syntax highlighting,
+LSP diagnostics, LSP semantic tokens, IDEA minimal PSI, IDEA diagnostic
+annotations, and an IDEA single-file run configuration.
 
 第一版工具链不定义补全、跳转、重命名、格式化或代码动作。
 The first tooling version does not define completion, navigation, rename,
@@ -47,6 +47,7 @@ current default lexer.
 | `keyword` | `val` |
 | `identifier` | `identifier` |
 | `integer` | `integer` |
+| `string` | `string` |
 | `operator` | `plus`, `minus`, `star`, `slash`, `equals` |
 | `delimiter` | `left_paren`, `right_paren`, `semicolon` |
 | `whitespace` | `whitespace` |
@@ -93,9 +94,10 @@ IDEA 插件必须提供 `.kk` 文件类型、syntax highlighter、最小 PSI she
 The IDEA plugin must provide the `.kk` file type, a syntax highlighter, a
 minimal PSI shell, and a diagnostic annotator.
 
-DSL feature 名称固定为 `kk-file-type`、`syntax-highlighter`、`minimal-psi`、`diagnostic-annotator` 和 `installable-plugin-zip`。
+DSL feature 名称固定为 `kk-file-type`、`syntax-highlighter`、`minimal-psi`、`diagnostic-annotator`、`single-file-run-configuration`、`current-file-run-configuration-producer` 和 `installable-plugin-zip`。
 The fixed DSL feature names are `kk-file-type`, `syntax-highlighter`,
-`minimal-psi`, `diagnostic-annotator`, and `installable-plugin-zip`.
+`minimal-psi`, `diagnostic-annotator`, `single-file-run-configuration`,
+`current-file-run-configuration-producer`, and `installable-plugin-zip`.
 
 IDEA syntax highlighter 必须复用共享高亮分类，不得复制 lexer 规则。
 The IDEA syntax highlighter must reuse shared highlighting classification and
@@ -109,6 +111,16 @@ IDEA diagnostic annotator 必须复用 `compiler:core` 编译管线，并把 com
 The IDEA diagnostic annotator must reuse the `compiler:core` compiler pipeline
 and map compiler diagnostic codes, messages, and source spans to IDEA error
 annotations.
+
+IDEA 单文件运行配置必须保存一个 `.kk` 文件路径，运行时复用 `compiler:core` 的 `ExecutionEngine` 编译执行该文件，并在 Run console 中显示 stdout、最终表达式值或 diagnostics。
+The IDEA single-file run configuration must store one `.kk` file path, reuse the
+`compiler:core` `ExecutionEngine` to compile and execute that file, and show
+stdout, the final expression value, or diagnostics in the Run console.
+
+IDEA 插件必须能从当前 `.kk` 文件 context 自动生成单文件运行配置，并把该文件路径写入配置。
+The IDEA plugin must be able to automatically create a single-file run
+configuration from the current `.kk` file context and write that file path into
+the configuration.
 
 IDEA 插件构建必须生成可通过 “Install Plugin from Disk” 安装的 zip。
 The IDEA plugin build must produce a zip installable through “Install Plugin

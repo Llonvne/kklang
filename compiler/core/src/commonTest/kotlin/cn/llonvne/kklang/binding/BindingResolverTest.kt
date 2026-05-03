@@ -58,6 +58,33 @@ class BindingResolverTest {
     }
 
     /**
+     * 验证 binding resolver 会保留字符串字面量为 bound string 节点。
+     * Verifies that the binding resolver preserves string literals as bound string nodes.
+     */
+    @Test
+    fun `binding resolver binds string literals`() {
+        val result = resolve("val text = \"hello\"; text")
+
+        assertFalse(result.hasErrors)
+        val program = requireNotNull(result.program)
+        assertEquals("string(hello)", program.declarations.single().initializer.render())
+        assertEquals("variable(text -> text)", program.expression.render())
+    }
+
+    /**
+     * 验证 binding resolver 将内建 print 调用绑定为专用节点。
+     * Verifies that the binding resolver binds builtin print calls as a dedicated node.
+     */
+    @Test
+    fun `binding resolver binds builtin print calls`() {
+        val result = resolve("val text = \"hello\"; print(text)")
+
+        assertFalse(result.hasErrors)
+        val program = requireNotNull(result.program)
+        assertEquals("print(variable(text -> text))", program.expression.render())
+    }
+
+    /**
      * 验证所有当前 bound expression 节点的 span 都委托给原始 syntax。
      * Verifies that every current bound expression node delegates span to original syntax.
      */
@@ -70,8 +97,20 @@ class BindingResolverTest {
         val binary = assertIs<BoundBinary>(outerGrouped.inner)
         val variable = assertIs<BoundVariable>(binary.left)
         val innerGrouped = assertIs<BoundGrouped>(binary.right)
+        val string = assertIs<BoundString>(requireNotNull(resolve("\"hello\"").program).expression)
+        val print = assertIs<BoundPrintCall>(requireNotNull(resolve("print(\"hello\")").program).expression)
         val missing = BoundMissing(MissingExpression(SourceSpan("sample.kk", 0, 0)))
-        val nodes: List<BoundExpression> = listOf(integer, prefix, outerGrouped, binary, variable, innerGrouped, missing)
+        val nodes: List<BoundExpression> = listOf(
+            integer,
+            string,
+            print,
+            prefix,
+            outerGrouped,
+            binary,
+            variable,
+            innerGrouped,
+            missing,
+        )
 
         for (node in nodes) {
             assertEquals(node.syntax.span, node.span)
@@ -92,6 +131,8 @@ class BindingResolverTest {
         assertDiagnosticCodes("left + right", "TYPE001", "TYPE001")
         assertDiagnosticCodes("val x = 1; x + missing", "TYPE001")
         assertDiagnosticCodes("val x = 1; missing + x", "TYPE001")
+        assertDiagnosticCodes("unknown(1)", "TYPE001")
+        assertDiagnosticCodes("print(missing)", "TYPE001")
     }
 
     /**
@@ -159,6 +200,8 @@ class BindingResolverTest {
 private fun BoundExpression.render(): String =
     when (this) {
         is BoundInteger -> "int64"
+        is BoundString -> "string(${syntax.text})"
+        is BoundPrintCall -> "print(${argument.render()})"
         is BoundVariable -> "variable(${syntax.name} -> ${symbol.name})"
         is BoundGrouped -> "grouped(${inner.render()})"
         is BoundPrefix -> "prefix(${syntax.operator.lexeme}, ${operand.render()})"

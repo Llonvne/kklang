@@ -111,6 +111,7 @@ internal object KkIdeaTokenTypeMapper {
             KkHighlightTokenCategory.Keyword -> KkTokenTypes.KEYWORD
             KkHighlightTokenCategory.Identifier -> KkTokenTypes.IDENTIFIER
             KkHighlightTokenCategory.Integer -> KkTokenTypes.INTEGER
+            KkHighlightTokenCategory.String -> KkTokenTypes.STRING
             KkHighlightTokenCategory.Operator -> KkTokenTypes.OPERATOR
             KkHighlightTokenCategory.Delimiter -> KkTokenTypes.DELIMITER
             KkHighlightTokenCategory.Whitespace -> KkTokenTypes.WHITESPACE

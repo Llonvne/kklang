@@ -21,5 +21,9 @@
         <externalAnnotator
             language="kklang"
             implementationClass="cn.llonvne.kklang.idea.KkDiagnosticExternalAnnotator" />
+        <configurationType
+            implementation="cn.llonvne.kklang.idea.KkRunConfigurationType" />
+        <runConfigurationProducer
+            implementation="cn.llonvne.kklang.idea.KkRunConfigurationProducer" />
     </extensions>
 </idea-plugin>

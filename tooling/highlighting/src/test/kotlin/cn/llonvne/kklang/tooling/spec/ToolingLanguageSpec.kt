@@ -112,6 +112,7 @@ val toolingLanguageSpec = toolingSpec {
         category("keyword", "val")
         category("identifier", "identifier")
         category("integer", "integer")
+        category("string", "string")
         category("operator", "plus", "minus", "star", "slash", "equals")
         category("delimiter", "left_paren", "right_paren", "semicolon")
         category("whitespace", "whitespace")
@@ -128,5 +129,7 @@ val toolingLanguageSpec = toolingSpec {
     ideaFeature("syntax-highlighter")
     ideaFeature("minimal-psi")
     ideaFeature("diagnostic-annotator")
+    ideaFeature("single-file-run-configuration")
+    ideaFeature("current-file-run-configuration-producer")
     ideaFeature("installable-plugin-zip")
 }

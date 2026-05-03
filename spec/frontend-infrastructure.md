@@ -53,6 +53,7 @@ The default lexer emits these token kinds.
 | --- | --- |
 | `identifier` | ASCII 字母或 `_` 开头，后接 ASCII 字母、数字或 `_` / ASCII letter or `_`, followed by ASCII letters, digits, or `_` |
 | `integer` | 一个或多个 ASCII 数字 / one or more ASCII digits |
+| `string` | 不含转义或换行的双引号文本 / double-quoted text without escapes or newlines |
 | `val` | 关键字 `val` / keyword `val` |
 | `left_paren` | `(` |
 | `right_paren` | `)` |
@@ -84,9 +85,9 @@ Unknown characters emit an `unknown` token and diagnostic `LEX001`.
 默认 parser 是基于 lexer token 的 Pratt parser。
 The default parser is a Pratt parser over lexer tokens.
 
-Parser 配置可以通过 token kind 注册 prefix 和 infix parselet 进行扩展。
+Parser 配置可以通过 token kind 注册 prefix 和 infix parselet 进行扩展；内建 call 语法作为 identifier 后缀解析。
 Parser configuration is extensible by registering prefix and infix parselets by
-token kind.
+token kind; the built-in call syntax is parsed as an identifier postfix.
 
 program 语法支持零个或多个 `val` declaration，后接一个最终 expression。
 Program syntax supports zero or more `val` declarations followed by one final
@@ -107,6 +108,8 @@ Expression grammar supports these forms.
 | --- | --- |
 | identifier expression / 标识符表达式 | `identifier` |
 | integer expression / 整数表达式 | `integer` |
+| string expression / 字符串表达式 | `string` |
+| builtin call expression / 内建调用表达式 | `identifier` `(` expression `)` |
 | grouped expression / 分组表达式 | `(` expression `)` |
 | prefix expression / 前缀表达式 | `+` expression, `-` expression |
 | multiplicative expression / 乘除表达式 | expression `*` expression, expression `/` expression |
@@ -118,6 +121,7 @@ Default precedence from lowest to highest:
 1. 加减 / additive: `+`, `-`
 2. 乘除 / multiplicative: `*`, `/`
 3. 前缀 / prefix: unary `+`, unary `-`
+4. 内建调用 / builtin call: `identifier(expression)`
 
 默认二元运算符是左结合；parser 配置可以注册右结合运算符。
 Default binary operators are left-associative. Parser configuration may register

@@ -109,6 +109,7 @@ class ParserConfig private constructor(
         const val ADDITIVE_PRECEDENCE: Int = 10
         const val MULTIPLICATIVE_PRECEDENCE: Int = 20
         const val PREFIX_PRECEDENCE: Int = 30
+        const val CALL_PRECEDENCE: Int = 40
 
         /**
          * 创建 seed grammar 的默认 parser 配置。
@@ -141,6 +142,7 @@ class ParserConfig private constructor(
         fun defaultParselets(): Builder {
             prefix(TokenKinds.Identifier) { _, token -> IdentifierExpression(token) }
             prefix(TokenKinds.Integer) { _, token -> IntegerExpression(token) }
+            prefix(TokenKinds.String) { _, token -> StringExpression(token) }
             prefix(TokenKinds.LeftParen) { parser, token ->
                 val expression = parser.parseExpression()
                 val rightParen = parser.expect(TokenKinds.RightParen, "PARSE003", "expected right_paren")

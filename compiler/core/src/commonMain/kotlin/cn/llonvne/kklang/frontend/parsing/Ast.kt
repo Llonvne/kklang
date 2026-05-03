@@ -73,6 +73,32 @@ data class IntegerExpression(val token: Token) : Expression {
 }
 
 /**
+ * 字符串字面量表达式，第一版只去掉包围的双引号。
+ * String-literal expression that only strips surrounding double quotes in the first version.
+ */
+data class StringExpression(val token: Token) : Expression {
+    val text: String
+        get() = token.lexeme.substring(1, token.lexeme.length - 1)
+
+    override val span: SourceSpan
+        get() = token.span
+}
+
+/**
+ * 内建调用表达式，当前 callee 只允许 identifier。
+ * Builtin call expression whose callee is currently limited to an identifier.
+ */
+data class CallExpression(
+    val callee: IdentifierExpression,
+    val leftParen: Token,
+    val argument: Expression,
+    val rightParen: Token,
+) : Expression {
+    override val span: SourceSpan =
+        callee.span.covering(rightParen.span)
+}
+
+/**
  * 前缀表达式，span 覆盖 operator 和 operand。
  * Prefix expression whose span covers the operator and operand.
  */

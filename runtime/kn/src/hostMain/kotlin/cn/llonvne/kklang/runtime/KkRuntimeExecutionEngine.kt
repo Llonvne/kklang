@@ -15,20 +15,21 @@ import cn.llonvne.kklang.frontend.diagnostics.Diagnostic
  */
 sealed interface KkRuntimeExecutionResult {
     val hasErrors: Boolean
+    val output: String
 
     /**
      * Native runtime backend 执行成功结果。
      * Successful execution result from the Native runtime backend.
      */
-    data class Success(val value: KkValue) : KkRuntimeExecutionResult {
+    data class Success(val value: KkValue, override val output: String = "") : KkRuntimeExecutionResult {
         override val hasErrors: Boolean = false
     }
 
     /**
-     * Native runtime backend 执行失败结果，保留 compiler 或 evaluator diagnostics。
-     * Failed execution result from the Native runtime backend preserving compiler or evaluator diagnostics.
+     * Native runtime backend 执行失败结果，保留 compiler/evaluator diagnostics 和失败前输出。
+     * Failed execution result from the Native runtime backend preserving compiler/evaluator diagnostics and output produced before failure.
      */
-    data class Failure(val diagnostics: List<Diagnostic>) : KkRuntimeExecutionResult {
+    data class Failure(val diagnostics: List<Diagnostic>, override val output: String = "") : KkRuntimeExecutionResult {
         override val hasErrors: Boolean
             get() = diagnostics.isNotEmpty()
     }
@@ -56,13 +57,13 @@ class KkRuntimeExecutionEngine(
         val evaluation = evaluator.evaluate(program.ir)
         val value = evaluation.value
         if (value == null) {
-            return KkRuntimeExecutionResult.Failure(evaluation.diagnostics)
+            return KkRuntimeExecutionResult.Failure(evaluation.diagnostics, evaluation.output)
         }
         if (evaluation.hasErrors) {
-            return KkRuntimeExecutionResult.Failure(evaluation.diagnostics)
+            return KkRuntimeExecutionResult.Failure(evaluation.diagnostics, evaluation.output)
         }
 
-        return KkRuntimeExecutionResult.Success(materialize(value))
+        return KkRuntimeExecutionResult.Success(materialize(value), evaluation.output)
     }
 
     /**
@@ -72,5 +73,7 @@ class KkRuntimeExecutionEngine(
     private fun materialize(value: ExecutionValue): KkValue =
         when (value) {
             is ExecutionValue.Int64 -> KkValue.int64(value.value)
+            is ExecutionValue.String -> KkValue.string(value.value)
+            ExecutionValue.Unit -> KkValue.unit()
         }
 }

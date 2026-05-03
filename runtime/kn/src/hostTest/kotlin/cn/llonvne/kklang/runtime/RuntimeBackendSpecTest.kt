@@ -31,8 +31,18 @@ class RuntimeBackendSpecTest {
             listOf("KkRuntimeExecutionEngine", "KkRuntimeExecutionResult"),
             minimalRuntimeBackendSpec.engineTypes,
         )
-        assertEquals(listOf("KkValue", "KkValue.Int64"), minimalRuntimeBackendSpec.valueTypes)
-        assertEquals(listOf("kk_value_int64"), minimalRuntimeBackendSpec.materializers)
+        assertEquals(
+            listOf("KkNativeSingleFileRunner", "KkNativeProcessResult", "kkrun"),
+            minimalRuntimeBackendSpec.executableTypes,
+        )
+        assertEquals(
+            listOf("KkValue", "KkValue.Unit", "KkValue.Int64", "KkValue.String"),
+            minimalRuntimeBackendSpec.valueTypes,
+        )
+        assertEquals(
+            listOf("kk_value_unit", "kk_value_int64", "kk_value_string"),
+            minimalRuntimeBackendSpec.materializers,
+        )
     }
 
     /**
@@ -45,6 +55,10 @@ class RuntimeBackendSpecTest {
             listOf("compiler diagnostics", "evaluator diagnostics"),
             minimalRuntimeBackendSpec.failureSources,
         )
+        assertEquals(
+            listOf("printRuntimeHostDebugCommand", "printRuntimeSingleFileDebugCommand"),
+            minimalRuntimeBackendSpec.debugCommands,
+        )
     }
 
     /**
@@ -56,13 +70,16 @@ class RuntimeBackendSpecTest {
         val runtimeMarkdown = readHostText("../../spec/runtime.md")
         val executionMarkdown = readHostText("../../spec/execution.md")
         val expectedRuntimeTerms = minimalRuntimeBackendSpec.engineTypes +
+            minimalRuntimeBackendSpec.executableTypes +
             minimalRuntimeBackendSpec.valueTypes +
-            minimalRuntimeBackendSpec.materializers
+            minimalRuntimeBackendSpec.materializers +
+            minimalRuntimeBackendSpec.debugCommands
 
         for (term in expectedRuntimeTerms) {
             assertTrue(runtimeMarkdown.contains(term), "missing $term in Markdown runtime spec")
         }
         assertTrue(executionMarkdown.contains("KkRuntimeExecutionEngine"), "missing backend engine in execution spec")
+        assertTrue(executionMarkdown.contains("KkNativeSingleFileRunner"), "missing Native single-file runner in execution spec")
         assertTrue(executionMarkdown.contains("KkValue.Int64"), "missing backend value in execution spec")
     }
 }

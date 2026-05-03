@@ -19,7 +19,7 @@ class LexerTest {
      */
     @Test
     fun `default lexer tokenizes seed surface and omits trivia`() {
-        val source = SourceText.of("sample.kk", "val alpha = 42;\n(beta) _A0")
+        val source = SourceText.of("sample.kk", "val alpha = 42;\n(beta) _A0 \"hi\"")
         val result = Lexer().tokenize(source)
 
         assertFalse(result.hasErrors)
@@ -34,14 +34,31 @@ class LexerTest {
                 TokenKinds.Identifier,
                 TokenKinds.RightParen,
                 TokenKinds.Identifier,
+                TokenKinds.String,
                 TokenKinds.EndOfFile,
             ),
             result.tokens.map { it.kind },
         )
-        assertEquals(listOf("val", "alpha", "=", "42", ";", "(", "beta", ")", "_A0", ""), result.tokens.map { it.lexeme })
+        assertEquals(listOf("val", "alpha", "=", "42", ";", "(", "beta", ")", "_A0", "\"hi\"", ""), result.tokens.map { it.lexeme })
         assertEquals(SourceSpan("sample.kk", 0, 3), result.tokens.first().span)
-        assertEquals(SourceSpan("sample.kk", 26, 26), result.tokens.last().span)
+        assertEquals(SourceSpan("sample.kk", 31, 31), result.tokens.last().span)
         assertEquals("identifier", TokenKinds.Identifier.toString())
+    }
+
+    /**
+     * 验证字符串字面量必须完整闭合，且第一版不接受换行和转义。
+     * Verifies that string literals must be closed, and the first version does not accept newlines or escapes.
+     */
+    @Test
+    fun `string lexer requires closed single line literals`() {
+        val closed = Lexer().tokenize(SourceText.of("sample.kk", "\"hello\""))
+        val unterminated = Lexer().tokenize(SourceText.of("sample.kk", "\"hello"))
+        val multiline = Lexer().tokenize(SourceText.of("sample.kk", "\"a\nb\""))
+
+        assertFalse(closed.hasErrors)
+        assertEquals(listOf(TokenKinds.String, TokenKinds.EndOfFile), closed.tokens.map { it.kind })
+        assertEquals(listOf(TokenKinds.Unknown, TokenKinds.Identifier, TokenKinds.EndOfFile), unterminated.tokens.map { it.kind })
+        assertEquals(listOf(TokenKinds.Unknown, TokenKinds.Identifier, TokenKinds.Identifier, TokenKinds.Unknown, TokenKinds.EndOfFile), multiline.tokens.map { it.kind })
     }
 
     /**
