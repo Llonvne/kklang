@@ -20,7 +20,7 @@ runtime.
 | 2 | Done / 已完成 | Define and implement builtin `print(value)` / 定义并实现内建 `print(value)` | `print` type-checks, lowers to Core IR, evaluates through IO abstraction, returns `Unit` / `print` 可类型检查、lower 到 Core IR、通过 IO 抽象执行，并返回 `Unit` |
 | 3 | Done / 已完成 | Materialize `String` / `Int` / `Unit` through Kotlin/Native + C runtime / 通过 Kotlin/Native + C runtime materialize `String` / `Int` / `Unit` | Runtime backend returns type-safe `KkValue` and C tests cover ABI behavior / runtime backend 返回类型安全 `KkValue`，C 测试覆盖 ABI 行为 |
 | 4 | Done / 已完成 | Add IDEA single-file run configuration / 增加 IDEA 单文件运行配置 | Current `.kk` file can compile and run from IDEA with diagnostics and stdout / 当前 `.kk` 文件可在 IDEA 中编译运行，并显示 diagnostics 和 stdout |
-| 5 | In progress / 进行中 | Add IDEA debug path for Native executable and C runtime / 增加 IDEA Native 可执行文件和 C runtime 调试路径 | Generated/debug command lets the user place breakpoints in C runtime code / 生成的调试命令允许用户在 C runtime 代码中打断点 |
+| 5 | Done / 已完成 | Add IDEA debug path for Native executable and C runtime / 增加 IDEA Native 可执行文件和 C runtime 调试路径 | Debug executor launches LLDB for the Native executable and accepts C runtime breakpoint commands / Debug executor 为 Native executable 启动 LLDB，并接受 C runtime 断点命令 |
 
 ## Constraints / 约束
 
@@ -42,12 +42,12 @@ runtime.
 
 ## Current Slice / 当前切片
 
-当前最小语言核心切片已完成；第 4 项已接入 `.kk` 单文件运行配置、当前文件自动生成配置和标准 run line marker；第 5 项已建立 Native `kkrun` debug executable、LLDB 命令和 IDEA Run console debug 提示，下一步做真正的 IDE debug 启动入口。
+当前最小语言核心切片已完成；第 4 项已接入 `.kk` 单文件运行配置、当前文件自动生成配置和标准 run line marker；第 5 项已建立 Native `kkrun` debug executable、LLDB 命令、IDEA Run console debug 提示和 Debug executor 启动入口。
 The current minimal language-core slice is complete; item 4 now has a `.kk`
 single-file run configuration and current-file automatic configuration
 creation plus a standard run line marker; item 5 now has the Native `kkrun`
-debug executable and LLDB command, plus IDEA Run console debug hints, and the
-next step is a real IDE debug launch entry point.
+debug executable and LLDB command, plus IDEA Run console debug hints and a Debug
+executor launch entry point.
 
 ## Progress Log / 进度记录
 
@@ -90,3 +90,11 @@ next step is a real IDE debug launch entry point.
   Next: upgrade those commands into an IDEA Debug action or dedicated run
   configuration executor that directly starts a C-runtime-breakpoint-capable
   debug session.
+- 已完成：现有 `kklang` 单文件运行配置在 Debug executor 下会先执行 Native debug executable 构建，再启动 `lldb -- kkrun.kexe <当前 .kk 文件>`；Debug console 显示 C runtime 断点提示，并把用户输入写入 LLDB stdin。
+  Done: the existing `kklang` single-file run configuration now builds the
+  Native debug executable under the Debug executor and then starts
+  `lldb -- kkrun.kexe <current .kk file>`; the Debug console shows the C runtime
+  breakpoint hint and writes user input to LLDB stdin.
+- 下一步：进入语言核心后续能力规划，例如函数定义或更完整的类型检查错误恢复。
+  Next: move into the next language-core capability, such as function
+  definitions or fuller type-checking error recovery.

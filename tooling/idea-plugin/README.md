@@ -55,6 +55,19 @@ The default install directory is
 Set `KKLANG_IDEA_CONFIG_DIR` to install into another IDEA configuration
 directory.
 
-安装后需要重启 IntelliJ IDEA，才能加载新的 `.kk` 高亮插件。
-Restart IntelliJ IDEA after installation so it can load the updated `.kk`
-highlighting plugin.
+安装后需要重启 IntelliJ IDEA，才能加载新的 `.kk` 插件能力。
+Restart IntelliJ IDEA after installation so it can load the updated `.kk` plugin
+capabilities.
+
+## Debug / 调试
+
+`.kk` 单文件运行配置在 Run executor 下使用 compiler/core 的内存执行路径；在 Debug executor 下会先构建 `:runtime:kn:linkKkrunDebugExecutableHost`，然后启动 `lldb -- kkrun.kexe <当前 .kk 文件>`。
+The `.kk` single-file run configuration uses the in-memory `compiler/core`
+execution path under the Run executor; under the Debug executor it first builds
+`:runtime:kn:linkKkrunDebugExecutableHost` and then starts
+`lldb -- kkrun.kexe <current .kk file>`.
+
+Debug console 会显示 C runtime 断点提示，例如 `breakpoint set --file kklang_runtime.c --name kk_value_int64`，并把输入框中的命令写入 LLDB stdin。
+The Debug console shows a C-runtime breakpoint hint, such as
+`breakpoint set --file kklang_runtime.c --name kk_value_int64`, and writes
+commands from the input field to LLDB stdin.

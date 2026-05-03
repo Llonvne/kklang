@@ -9,6 +9,9 @@ import com.intellij.execution.Location
 import com.intellij.execution.actions.ConfigurationContext
 import com.intellij.execution.configurations.RunnerSettings
 import com.intellij.execution.configurations.RuntimeConfigurationException
+import com.intellij.execution.executors.DefaultDebugExecutor
+import com.intellij.execution.process.NopProcessHandler
+import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.execution.runners.ProgramRunner
 import com.intellij.icons.AllIcons
@@ -34,6 +37,7 @@ import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.util.ActionCallback
 import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.util.Key
 import com.intellij.openapi.util.Ref
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiElement
@@ -41,6 +45,7 @@ import com.intellij.psi.PsiFile
 import com.intellij.testFramework.LightVirtualFile
 import org.jdom.Element
 import java.awt.Container
+import java.io.ByteArrayOutputStream
 import java.lang.reflect.Proxy
 import javax.swing.JTextField
 import sun.misc.Unsafe
@@ -298,7 +303,12 @@ class KkRunConfigurationTest {
             assertTrue(command.buildCommand.contains(":runtime:kn:linkKkrunDebugExecutableHost"))
             assertTrue(command.printCommand.contains(":runtime:kn:printRuntimeSingleFileDebugCommand"))
             assertTrue(command.lldbCommand.contains("lldb --"))
+            assertEquals("/bin/zsh", command.debugLaunchCommand.first())
+            assertTrue(command.debugLaunchCommandText.contains("linkKkrunDebugExecutableHost"))
+            assertTrue(command.debugLaunchCommandText.contains("lldb"))
+            assertTrue(command.cBreakpointHint.contains("kklang_runtime.c"))
             assertTrue(command.consoleText().contains("Native debug executable:"))
+            assertTrue(command.debugConsoleText().contains("Native debug launch:"))
         } finally {
             root.deleteRecursively()
         }
@@ -333,6 +343,112 @@ class KkRunConfigurationTest {
             root.deleteRecursively()
             incompleteRoot.deleteRecursively()
         }
+    }
+
+    /**
+     * 验证 run configuration 在 Debug executor 下返回 Native debug state。
+     * Verifies that the run configuration returns the Native debug state under the Debug executor.
+     */
+    @Test
+    fun `run configuration selects native debug state for debug executor`() {
+        val project = mockProject()
+        try {
+            val configuration = KkRunConfiguration(project, KkRunConfigurationType.configurationFactory, "sample")
+            configuration.filePath = "/tmp/main.kk"
+
+            assertIs<KkNativeDebugProfileState>(configuration.getState(TestDebugExecutor, ExecutionEnvironment()))
+            assertIs<KkRunProfileState>(configuration.getState(TestExecutor, ExecutionEnvironment()))
+        } finally {
+            project.dispose()
+        }
+    }
+
+    /**
+     * 验证 Native debug profile state 启动 LLDB process 并返回可输入命令的 console。
+     * Verifies that the Native debug profile state starts the LLDB process and returns an input-capable console.
+     */
+    @Test
+    fun `native debug profile state launches process with interactive console`() {
+        val kkFile = createTempFile(suffix = ".kk")
+        val handler = CapturingProcessHandler()
+        var launched: KkNativeDebugCommand.Available? = null
+        var attached: ProcessHandler? = null
+        try {
+            kkFile.writeText("1")
+            val command = nativeDebugCommand(listOf("/usr/bin/true"))
+            val state = KkNativeDebugProfileState(
+                filePath = kkFile.pathString,
+                commandProvider = { command },
+                processLauncher = KkNativeDebugProcessLauncher {
+                    launched = it
+                    handler
+                },
+                terminationAttacher = {
+                    attached = it
+                },
+            )
+
+            val result = state.execute(TestDebugExecutor, TestRunner)
+            val console = assertIs<KkInteractiveProcessConsole>(result.executionConsole)
+
+            assertSame(command, launched)
+            assertSame(handler, attached)
+            assertSame(handler, result.processHandler)
+            assertTrue(handler.isStartNotified)
+            assertTrue(console.text.contains("Native debug launch:"))
+
+            handler.notifyTextAvailable("lldb ready\n", Key.create<Any>("stdout"))
+            val inputField = assertNotNull(findTextField(console.component))
+            assertSame(inputField, console.preferredFocusableComponent)
+            console.submitInput("")
+            inputField.text = "breakpoint set --file kklang_runtime.c --name kk_value_int64"
+            inputField.postActionEvent()
+            assertTrue(console.text.contains("lldb ready"))
+            assertTrue(console.text.contains("> breakpoint set --file kklang_runtime.c --name kk_value_int64"))
+            assertEquals("breakpoint set --file kklang_runtime.c --name kk_value_int64\n", handler.inputText())
+            console.dispose()
+        } finally {
+            kkFile.deleteIfExists()
+        }
+    }
+
+    /**
+     * 验证 Native debug profile state 拒绝缺失文件和无法定位仓库的文件。
+     * Verifies that the Native debug profile state rejects missing files and files outside a repository.
+     */
+    @Test
+    fun `native debug profile state rejects missing files and unavailable commands`() {
+        val kkFile = createTempFile(suffix = ".kk")
+        try {
+            kkFile.writeText("1")
+            assertFailsWith<ExecutionException> {
+                KkNativeDebugProfileState(
+                    filePath = kkFile.resolveSibling("missing.kk").pathString,
+                    commandProvider = { nativeDebugCommand() },
+                ).execute(TestDebugExecutor, TestRunner)
+            }
+            assertFailsWith<ExecutionException> {
+                KkNativeDebugProfileState(
+                    filePath = kkFile.pathString,
+                    commandProvider = { KkNativeDebugCommand.Unavailable("no repo") },
+                ).execute(TestDebugExecutor, TestRunner)
+            }
+        } finally {
+            kkFile.deleteIfExists()
+        }
+    }
+
+    /**
+     * 验证 LLDB process launcher 使用 debug launch command 启动外部进程。
+     * Verifies that the LLDB process launcher starts an external process from the debug launch command.
+     */
+    @Test
+    fun `lldb process launcher starts debug launch command`() {
+        val handler = KkLldbProcessLauncher().start(nativeDebugCommand(listOf("/usr/bin/true")))
+
+        handler.startNotify()
+        assertTrue(handler.waitFor(5_000))
+        assertEquals(0, handler.exitCode)
     }
 
     /**
@@ -566,6 +682,25 @@ class KkRunConfigurationTest {
     }
 
     /**
+     * 创建测试用 Native debug command。
+     * Creates a Native debug command for tests.
+     */
+    private fun nativeDebugCommand(
+        debugLaunchCommand: List<String> = listOf("/usr/bin/true"),
+    ): KkNativeDebugCommand.Available =
+        KkNativeDebugCommand.Available(
+            sourceFilePath = "/tmp/main.kk",
+            repositoryRootPath = "/tmp",
+            executablePath = "/tmp/runtime/kn/build/bin/host/kkrunDebugExecutable/kkrun.kexe",
+            buildCommand = "/tmp/gradlew :runtime:kn:linkKkrunDebugExecutableHost",
+            printCommand = "/tmp/gradlew :runtime:kn:printRuntimeSingleFileDebugCommand",
+            lldbCommand = "lldb -- /tmp/runtime/kn/build/bin/host/kkrunDebugExecutable/kkrun.kexe /tmp/main.kk",
+            debugLaunchCommand = debugLaunchCommand,
+            debugLaunchCommandText = debugLaunchCommand.joinToString(" "),
+            cBreakpointHint = "breakpoint set --file kklang_runtime.c --name kk_value_int64",
+        )
+
+    /**
      * 调用 producer 的 protected setup 方法以覆盖 IDEA context glue。
      * Invokes the producer's protected setup method to cover the IDEA context glue.
      */
@@ -707,6 +842,39 @@ class KkRunConfigurationTest {
         override fun getStartActionText(): String = "Run"
         override fun getContextActionId(): String = "RunKk"
         override fun getHelpId(): String? = null
+    }
+
+    /**
+     * 测试用 Debug executor，触发 Native debug state 分支。
+     * Test Debug executor that triggers the Native debug state branch.
+     */
+    private object TestDebugExecutor : Executor() {
+        override fun getToolWindowId(): String = "Debug"
+        override fun getToolWindowIcon() = AllIcons.RunConfigurations.Application
+        override fun getIcon() = AllIcons.RunConfigurations.Application
+        override fun getDisabledIcon() = AllIcons.RunConfigurations.Application
+        override fun getDescription(): String = "Debug kklang test"
+        override fun getActionName(): String = "Debug"
+        override fun getId(): String = DefaultDebugExecutor.EXECUTOR_ID
+        override fun getStartActionText(): String = "Debug"
+        override fun getContextActionId(): String = "DebugKk"
+        override fun getHelpId(): String? = null
+    }
+
+    /**
+     * 捕获 stdin 的测试 process handler。
+     * Test process handler that captures stdin.
+     */
+    private class CapturingProcessHandler : NopProcessHandler() {
+        private val input = ByteArrayOutputStream()
+
+        override fun getProcessInput(): java.io.OutputStream = input
+
+        /**
+         * 返回已写入 process stdin 的文本。
+         * Returns text written to process stdin.
+         */
+        fun inputText(): String = input.toString()
     }
 
     /**

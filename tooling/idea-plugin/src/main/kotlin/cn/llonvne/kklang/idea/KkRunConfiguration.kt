@@ -10,20 +10,28 @@ import com.intellij.execution.Executor
 import com.intellij.execution.actions.ConfigurationContext
 import com.intellij.execution.actions.LazyRunConfigurationProducer
 import com.intellij.execution.configurations.ConfigurationFactory
+import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.configurations.ConfigurationTypeBase
 import com.intellij.execution.configurations.RunConfigurationBase
 import com.intellij.execution.configurations.RunConfigurationOptions
 import com.intellij.execution.configurations.RunProfileState
 import com.intellij.execution.configurations.RuntimeConfigurationException
+import com.intellij.execution.executors.DefaultDebugExecutor
 import com.intellij.execution.lineMarker.ExecutorAction
 import com.intellij.execution.lineMarker.RunLineMarkerContributor
+import com.intellij.execution.process.KillableProcessHandler
 import com.intellij.execution.process.NopProcessHandler
+import com.intellij.execution.process.ProcessEvent
+import com.intellij.execution.process.ProcessHandler
+import com.intellij.execution.process.ProcessListener
+import com.intellij.execution.process.ProcessTerminatedListener
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.execution.runners.ProgramRunner
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.options.SettingsEditor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.DumbAware
+import com.intellij.openapi.util.Key
 import com.intellij.openapi.util.Ref
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
@@ -334,6 +342,9 @@ sealed interface KkNativeDebugCommand {
         val buildCommand: String,
         val printCommand: String,
         val lldbCommand: String,
+        val debugLaunchCommand: List<String>,
+        val debugLaunchCommandText: String,
+        val cBreakpointHint: String,
     ) : KkNativeDebugCommand {
         /**
          * 渲染 Native debug executable 和命令提示。
@@ -346,6 +357,20 @@ sealed interface KkNativeDebugCommand {
                 append("Native debug build: ").append(buildCommand).append('\n')
                 append("Native debug task: ").append(printCommand).append('\n')
                 append("Native debug LLDB: ").append(lldbCommand).append('\n')
+            }
+
+        /**
+         * 渲染 Debug executor 启动 LLDB 会话时显示的控制台头部。
+         * Renders the console header shown when the Debug executor starts the LLDB session.
+         */
+        fun debugConsoleText(): String =
+            buildString {
+                append("Native debug session: LLDB\n")
+                append("Native debug executable: ").append(executablePath).append('\n')
+                append("Native debug build: ").append(buildCommand).append('\n')
+                append("Native debug launch: ").append(debugLaunchCommandText).append('\n')
+                append("C runtime breakpoint hint: ").append(cBreakpointHint).append('\n')
+                append("Type LLDB commands below.\n")
             }
     }
 
@@ -382,6 +407,9 @@ class KkNativeDebugCommandService {
         val printCommand =
             "${gradlew.shellText()} :runtime:kn:printRuntimeSingleFileDebugCommand -Pkklang.debug.source=${sourcePath.shellText()}"
         val lldbCommand = "lldb -- ${executable.shellText()} ${sourcePath.shellText()}"
+        val launchScript = "cd ${root.shellText()} && $buildCommand && exec $lldbCommand"
+        val debugLaunchCommand = listOf("/bin/zsh", "-lc", launchScript)
+        val cBreakpointHint = "breakpoint set --file kklang_runtime.c --name kk_value_int64"
 
         return KkNativeDebugCommand.Available(
             sourceFilePath = sourcePath.pathString,
@@ -390,6 +418,9 @@ class KkNativeDebugCommandService {
             buildCommand = buildCommand,
             printCommand = printCommand,
             lldbCommand = lldbCommand,
+            debugLaunchCommand = debugLaunchCommand,
+            debugLaunchCommandText = debugLaunchCommand.joinToString(" ") { it.shellText() },
+            cBreakpointHint = cBreakpointHint,
         )
     }
 
@@ -425,6 +456,41 @@ class KkNativeDebugCommandService {
      */
     private fun Path.shellText(): String =
         "'${pathString.replace("'", "'\"'\"'")}'"
+
+    /**
+     * 返回 shell 命令中可直接使用的单引号字符串。
+     * Returns single-quoted string text that can be used directly in shell commands.
+     */
+    private fun String.shellText(): String =
+        "'${replace("'", "'\"'\"'")}'"
+}
+
+/**
+ * 启动 Native LLDB debug process 的抽象。
+ * Abstraction for starting the Native LLDB debug process.
+ */
+fun interface KkNativeDebugProcessLauncher {
+    /**
+     * 使用给定 Native debug command 启动 process handler。
+     * Starts a process handler from the given Native debug command.
+     */
+    fun start(command: KkNativeDebugCommand.Available): ProcessHandler
+}
+
+/**
+ * 使用 IntelliJ process handler 启动 LLDB。
+ * Starts LLDB through an IntelliJ process handler.
+ */
+class KkLldbProcessLauncher : KkNativeDebugProcessLauncher {
+    /**
+     * 从 debug launch command 创建可停止的 process handler。
+     * Creates a killable process handler from the debug launch command.
+     */
+    override fun start(command: KkNativeDebugCommand.Available): ProcessHandler =
+        KillableProcessHandler(
+            GeneralCommandLine(command.debugLaunchCommand)
+                .withWorkDirectory(command.repositoryRootPath),
+        )
 }
 
 /**
@@ -467,7 +533,11 @@ class KkRunConfiguration(
      * Creates the execution state.
      */
     override fun getState(executor: Executor, environment: ExecutionEnvironment): RunProfileState =
-        KkRunProfileState(filePath)
+        if (executor.id == DefaultDebugExecutor.EXECUTOR_ID) {
+            KkNativeDebugProfileState(filePath)
+        } else {
+            KkRunProfileState(filePath)
+        }
 
     /**
      * 从 plugin XML state 读取文件路径。
@@ -555,6 +625,39 @@ class KkRunProfileState(
 }
 
 /**
+ * kklang Native debug 状态，启动仓库内 LLDB 会话。
+ * kklang Native debug state that starts the in-repository LLDB session.
+ */
+class KkNativeDebugProfileState(
+    private val filePath: String,
+    private val commandProvider: (String) -> KkNativeDebugCommand = KkNativeDebugCommandService()::commandFor,
+    private val processLauncher: KkNativeDebugProcessLauncher = KkLldbProcessLauncher(),
+    private val terminationAttacher: (ProcessHandler) -> Unit = { ProcessTerminatedListener.attach(it) },
+) : RunProfileState {
+    /**
+     * 启动 Native debug process 并返回可输入 LLDB 命令的 console。
+     * Starts the Native debug process and returns a console that accepts LLDB commands.
+     */
+    override fun execute(executor: Executor, runner: ProgramRunner<*>): com.intellij.execution.ExecutionResult {
+        val path = Path.of(filePath)
+        if (!Files.isRegularFile(path)) {
+            throw ExecutionException("Configured .kk file does not exist: $filePath")
+        }
+
+        val command = commandProvider(path.toString())
+        if (command is KkNativeDebugCommand.Unavailable) {
+            throw ExecutionException("Cannot start kklang Native debug session: ${command.reason}")
+        }
+        command as KkNativeDebugCommand.Available
+        val processHandler = processLauncher.start(command)
+        terminationAttacher(processHandler)
+        val console = KkInteractiveProcessConsole(command.debugConsoleText(), processHandler)
+        processHandler.startNotify()
+        return DefaultExecutionResult(console, processHandler)
+    }
+}
+
+/**
  * 已完成的轻量 process handler，用于同步单文件运行结果。
  * Completed lightweight process handler for synchronous single-file run results.
  */
@@ -566,6 +669,76 @@ class KkCompletedProcessHandler : NopProcessHandler() {
     fun complete(exitCode: Int) {
         startNotify()
         notifyProcessTerminated(exitCode)
+    }
+}
+
+/**
+ * 轻量交互式 process console，把 process 输出追加到文本区并把输入写入 stdin。
+ * Lightweight interactive process console that appends process output and writes user input to stdin.
+ */
+class KkInteractiveProcessConsole(
+    initialText: String,
+    private val processHandler: ProcessHandler,
+) : com.intellij.execution.ui.ExecutionConsole, ProcessListener {
+    private val textArea = JTextArea(initialText).apply {
+        isEditable = false
+    }
+    private val inputField = JTextField()
+    private val panel = JPanel(BorderLayout()).apply {
+        add(textArea, BorderLayout.CENTER)
+        add(inputField, BorderLayout.SOUTH)
+    }
+
+    init {
+        processHandler.addProcessListener(this)
+        inputField.addActionListener {
+            submitInput(inputField.text)
+        }
+    }
+
+    val text: String
+        get() = textArea.text
+
+    /**
+     * 把 process 输出追加到 console 文本区。
+     * Appends process output to the console text area.
+     */
+    override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
+        textArea.append(event.text)
+    }
+
+    /**
+     * 提交一条 LLDB 命令到 process stdin；空命令不写入。
+     * Submits one LLDB command to process stdin; empty commands are not written.
+     */
+    fun submitInput(command: String) {
+        if (command.isEmpty()) {
+            return
+        }
+        textArea.append("> $command\n")
+        processHandler.processInput!!.write("$command\n".toByteArray())
+        processHandler.processInput!!.flush()
+        inputField.text = ""
+    }
+
+    /**
+     * 返回 console Swing 组件。
+     * Returns the console Swing component.
+     */
+    override fun getComponent(): JComponent = panel
+
+    /**
+     * 返回首选 focus 组件。
+     * Returns the preferred focus component.
+     */
+    override fun getPreferredFocusableComponent(): JComponent = inputField
+
+    /**
+     * 移除 process listener。
+     * Removes the process listener.
+     */
+    override fun dispose() {
+        processHandler.removeProcessListener(this)
     }
 }
 

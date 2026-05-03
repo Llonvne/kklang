@@ -134,5 +134,6 @@ val toolingLanguageSpec = toolingSpec {
     ideaFeature("current-file-run-configuration-producer")
     ideaFeature("current-file-run-line-marker")
     ideaFeature("native-debug-command-hint")
+    ideaFeature("native-debug-executor-launch")
     ideaFeature("installable-plugin-zip")
 }
